@@ -14,6 +14,7 @@ packages required (see requirements.txt).
 
 from __future__ import annotations
 
+import math
 import sys
 from pathlib import Path
 
@@ -35,8 +36,11 @@ from plotly.subplots import make_subplots  # noqa: E402
 
 from frbus_shock import (  # noqa: E402
     CATALOGUE,
+    DEFAULT_OUTPUTS,
     MODEL_VINTAGE,
-    OUTPUT_VARS,
+    OUTPUT_BY_KEY,
+    OUTPUT_CATALOGUE,
+    OUTPUT_GROUPS,
     data_vintage,
     deviations,
     expectations_choices,
@@ -68,8 +72,14 @@ def _cached_run(
     start,
     horizon,
     custom_variable,
+    variables,
 ):
-    """Run a simulation and return the deviation panels + metadata (picklable)."""
+    """Run a simulation and return the deviation panels + metadata (picklable).
+
+    ``variables`` is a tuple of output keys; it is part of the cache key so a
+    different output selection re-slices without necessarily re-solving (the
+    heavy solve is itself memoised at the library level by run parameters).
+    """
     result = run_simulation(
         shock_key=shock_key,
         magnitude=magnitude,
@@ -79,12 +89,14 @@ def _cached_run(
         horizon=horizon,
         custom_variable=custom_variable or None,
     )
+    keys = list(variables)
     return {
         "meta": run_metadata(result),
-        "active": deviations(result, "active"),
-        "held": deviations(result, "held"),
-        "csv": to_csv_bytes(result),
+        "active": deviations(result, "active", keys),
+        "held": deviations(result, "held", keys),
+        "csv": to_csv_bytes(result, keys),
         "window": [str(q) for q in result.window],
+        "variables": keys,
     }
 
 
@@ -92,14 +104,20 @@ def _dates(window):
     return [pd.Period(q, freq="Q").to_timestamp() for q in window]
 
 
-def _build_figure(active: pd.DataFrame, held: pd.DataFrame, window) -> go.Figure:
-    """2×2 grid of deviation charts, one per output variable."""
-    labels = [f"{lbl} ({unit})" for lbl, unit in OUTPUT_VARS.values()]
-    fig = make_subplots(rows=2, cols=2, subplot_titles=labels, vertical_spacing=0.14)
+def _build_figure(active: pd.DataFrame, held: pd.DataFrame, window, variables) -> go.Figure:
+    """Grid of deviation charts, one per selected output variable (2 columns)."""
+    cols = 2 if len(variables) > 1 else 1
+    rows = math.ceil(len(variables) / cols)
+    titles = [
+        f"{OUTPUT_BY_KEY[v].label} ({OUTPUT_BY_KEY[v].unit})" for v in variables
+    ]
+    fig = make_subplots(
+        rows=rows, cols=cols, subplot_titles=titles, vertical_spacing=0.10 if rows <= 2 else 0.06
+    )
     x = _dates(window)
-    positions = {var: (i // 2 + 1, i % 2 + 1) for i, var in enumerate(OUTPUT_VARS)}
-    for var, (row, col) in positions.items():
-        show_legend = var == list(OUTPUT_VARS)[0]
+    for i, var in enumerate(variables):
+        row, col = i // cols + 1, i % cols + 1
+        show_legend = i == 0
         fig.add_trace(
             go.Scatter(
                 x=x, y=active[var], name="With response (active rule)",
@@ -117,10 +135,10 @@ def _build_figure(active: pd.DataFrame, held: pd.DataFrame, window) -> go.Figure
             row=row, col=col,
         )
         fig.add_hline(y=0, line=dict(color="#999", width=1), row=row, col=col)
-        fig.update_yaxes(title_text="pp dev.", row=row, col=col)
+        fig.update_yaxes(title_text=f"{OUTPUT_BY_KEY[var].unit} dev.", row=row, col=col)
     fig.update_layout(
-        height=680,
-        legend=dict(orientation="h", yanchor="bottom", y=1.06, xanchor="left", x=0),
+        height=max(340, 300 * rows),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
         margin=dict(l=40, r=20, t=90, b=30),
         hovermode="x unified",
         template="plotly_white",
@@ -224,6 +242,36 @@ start = st.sidebar.selectbox(
 )
 horizon = st.sidebar.slider("Horizon (quarters shown)", 8, 40, 20)
 
+st.sidebar.divider()
+
+# --- Output variable selector (grouped) ---
+st.sidebar.markdown("**Output variables**")
+_selected_outputs: list = []
+with st.sidebar.expander(
+    "Choose what to chart", expanded=False
+):
+    st.caption(
+        "Rates & inflation show percentage-point deviations; levels (GDP, "
+        "consumption, investment) show percent deviations from baseline."
+    )
+    for _group in OUTPUT_GROUPS:
+        _group_vars = [v for v in OUTPUT_CATALOGUE if v.group == _group]
+        _defaults = [v.key for v in _group_vars if v.key in DEFAULT_OUTPUTS]
+        _picked = st.multiselect(
+            _group,
+            options=[v.key for v in _group_vars],
+            default=_defaults,
+            format_func=lambda k: f"{OUTPUT_BY_KEY[k].label} ({OUTPUT_BY_KEY[k].unit})",
+            key=f"outsel_{_group}",
+        )
+        _selected_outputs.extend(_picked)
+
+# Preserve catalogue order; fall back to the four defaults if nothing is picked.
+selected_outputs = [v.key for v in OUTPUT_CATALOGUE if v.key in _selected_outputs]
+if not selected_outputs:
+    selected_outputs = list(DEFAULT_OUTPUTS)
+st.sidebar.caption(f"{len(selected_outputs)} variable(s) selected")
+
 run_clicked = st.sidebar.button("▶ Run simulation", type="primary", use_container_width=True)
 
 
@@ -266,6 +314,7 @@ if run_clicked:
                 start,
                 int(horizon),
                 custom_variable,
+                tuple(selected_outputs),
             )
         except Exception as exc:  # noqa: BLE001 — surface solver/convergence errors
             st.error(
@@ -279,7 +328,7 @@ if run_clicked:
     st.subheader(f"{meta['shock']} — {meta['magnitude']} {meta['magnitude_unit']}, "
                  f"{meta['duration_quarters']}q, {meta['expectations'].upper()} expectations")
 
-    fig = _build_figure(out["active"], out["held"], out["window"])
+    fig = _build_figure(out["active"], out["held"], out["window"], out["variables"])
     st.plotly_chart(fig, use_container_width=True)
 
     st.caption(
