@@ -46,6 +46,7 @@ from .multipliers import (
     multiplier_table,
     run_multiplier,
 )
+from .optcontrol import DEFAULT_WEIGHTS, OCPResult, run_optimal_control
 from .shocks import CATALOGUE, ShockSpec, custom_shock, get_shock
 from .simulate import (
     DEFAULT_HORIZON,
@@ -71,6 +72,9 @@ __all__ = [
     "INSTRUMENTS",
     "FiscalInstrument",
     "MultiplierResult",
+    "run_optimal_control",
+    "OCPResult",
+    "DEFAULT_WEIGHTS",
     "deviations",
     "deviation_panel",
     "levels_panel",

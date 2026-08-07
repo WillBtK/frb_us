@@ -39,6 +39,10 @@ baseline) side by side.
   fiscal impulse) for federal & state/local purchases, transfers, and a personal
   tax cut, with the active rule vs. an accommodative (funds-rate-held) response —
   in the spirit of CBO's fiscal-multiplier work.
+- **Optimal-Control page** (a third tab): the funds-rate path that minimises a
+  quadratic loss over the inflation and unemployment gaps (with adjustable
+  weights), vs. the Taylor rule and no response — solved by the linear-quadratic
+  method, in the spirit of the FEDS Note on optimal-control policy.
 
 ## Vintages
 
@@ -89,13 +93,18 @@ switches rather than a hack (full detail in `src/frbus_shock/policy.py`):
 ## Repository layout
 
 ```
-app/streamlit_app.py         Streamlit entry point (deploy this file)
+app/streamlit_app.py         Streamlit entry point — Shock analysis (deploy this)
+app/pages/                   Extra tabs (Streamlit multipage)
+  ├─ 1_Fiscal_Multipliers.py Output multipliers by instrument & monetary response
+  └─ 2_Optimal_Control.py    LQ optimal-control funds-rate path vs. Taylor
 src/frbus_shock/             Simulation library wrapping PyFRB/US
-  ├─ shocks.py               Shock catalogue (levers, units, defaults)
+  ├─ shocks.py               Shock library (levers, units, defaults, groups)
   ├─ policy.py               Active rule vs. funds-rate-held mechanism
   ├─ model.py                Cached model + baseline loading, vintages
-  ├─ simulate.py             run_simulation(): baseline + 2 scenarios
-  └─ outputs.py              Deviation panels + CSV/chart export
+  ├─ simulate.py             run_simulation(): baseline + 2 scenarios, multi-shock
+  ├─ outputs.py              Deviation panels, summary table, CSV/chart export
+  ├─ multipliers.py          Fiscal output multipliers
+  └─ optcontrol.py           Linear-quadratic optimal control
 third_party/pyfrbus/         Vendored, patched PyFRB/US (public domain)
   ├─ pyfrbus/                Model platform code (3 compat patches)
   ├─ models/model.xml        FRB/US equations
