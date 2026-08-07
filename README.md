@@ -132,8 +132,11 @@ build**, so the dashboard's scope is a deliberate choice.
 
 ## Provenance & licence
 
-Original code (the `frbus_shock` package, the app, tests, workflows) is MIT
-(`LICENSE`). The vendored FRB/US model, PyFRB/US platform, and LONGBASE dataset
-are **public-domain** works of the Federal Reserve Board. When you can reach
-`federalreserve.gov`, prefer re-vendoring PyFRB/US and the data from the
+The original code in this repository (the `frbus_shock` package, the app, tests,
+and workflows) is **© 2026 WillBtK — All Rights Reserved** (`LICENSE`): the
+source is public for viewing, but no licence to use, copy, modify, or distribute
+it is granted. The vendored FRB/US model, PyFRB/US platform, and LONGBASE dataset
+are **public-domain** works of the Federal Reserve Board and remain freely usable
+under their own terms. When you can reach `federalreserve.gov`, prefer
+re-vendoring PyFRB/US and the data from the
 [official page](https://www.federalreserve.gov/econres/us-models-python.htm).
