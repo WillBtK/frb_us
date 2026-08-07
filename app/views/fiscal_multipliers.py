@@ -27,8 +27,6 @@ import streamlit as st  # noqa: E402
 from frbus_shock import INSTRUMENTS, data_vintage, multiplier_table  # noqa: E402
 from frbus_shock.multipliers import DEFAULT_HORIZON_LABELS  # noqa: E402
 
-st.set_page_config(page_title="FRB/US Fiscal Multipliers", page_icon="💵", layout="wide")
-
 _ACTIVE_COLOR = "#1f4e79"
 _HELD_COLOR = "#c1440e"
 

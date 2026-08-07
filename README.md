@@ -93,10 +93,11 @@ switches rather than a hack (full detail in `src/frbus_shock/policy.py`):
 ## Repository layout
 
 ```
-app/streamlit_app.py         Streamlit entry point — Shock analysis (deploy this)
-app/pages/                   Extra tabs (Streamlit multipage)
-  ├─ 1_Fiscal_Multipliers.py Output multipliers by instrument & monetary response
-  └─ 2_Optimal_Control.py    LQ optimal-control funds-rate path vs. Taylor
+app/streamlit_app.py         Streamlit entry point — navigation router (deploy this)
+app/views/                   The three tabs (via st.navigation)
+  ├─ shock_analysis.py       Shock Analysis
+  ├─ fiscal_multipliers.py   Fiscal Multipliers
+  └─ optimal_control.py      Optimal Control
 src/frbus_shock/             Simulation library wrapping PyFRB/US
   ├─ shocks.py               Shock library (levers, units, defaults, groups)
   ├─ policy.py               Active rule vs. funds-rate-held mechanism

@@ -27,8 +27,6 @@ from plotly.subplots import make_subplots  # noqa: E402
 
 from frbus_shock import CATALOGUE, data_vintage, run_optimal_control  # noqa: E402
 
-st.set_page_config(page_title="FRB/US Optimal Control", page_icon="🎯", layout="wide")
-
 _OPT = "#1f7a3d"      # green — optimal
 _TAY = "#1f4e79"      # blue — Taylor
 _HELD = "#c1440e"     # rust — no response
