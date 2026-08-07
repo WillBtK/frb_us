@@ -149,6 +149,37 @@ def _build_figure(active: pd.DataFrame, held: pd.DataFrame, window, variables) -
 # --------------------------------------------------------------------------- #
 # Sidebar — controls                                                          #
 # --------------------------------------------------------------------------- #
+def _summary_from_out(out, horizons):
+    """Peak effect (+ quarter) and effect at chosen horizons, from cached frames.
+
+    Computed from the already-solved deviation frames, so changing the horizons
+    re-renders instantly without re-running the model.
+    """
+    n = len(out["window"])
+    quarters = out["window"]
+    scen_frames = [
+        ("With policy response (active rule)", out["active"]),
+        ("Without response (funds rate held)", out["held"]),
+    ]
+    rows = []
+    for scen_label, dev in scen_frames:
+        for key in out["variables"]:
+            var = OUTPUT_BY_KEY[key]
+            s = dev[key]
+            pos = int(s.abs().to_numpy().argmax())  # index of largest |deviation|
+            row = {
+                "Variable": var.label,
+                "Unit": var.unit,
+                "Scenario": scen_label,
+                "Peak": round(float(s.iloc[pos]), 3),
+                "Peak quarter": quarters[pos],
+            }
+            for h in horizons:
+                row[f"@{h}q"] = round(float(s.iloc[h]), 3) if 0 <= h < n else None
+            rows.append(row)
+    return pd.DataFrame(rows)
+
+
 st.sidebar.title("Shock configuration")
 
 shock_labels = {k: v.label for k, v in CATALOGUE.items()}
@@ -323,27 +354,68 @@ if run_clicked:
                 "shocks can prevent the model from converging."
             )
             st.stop()
+    # Persist so table/horizon controls re-render without re-solving.
+    st.session_state["run"] = out
 
+out = st.session_state.get("run")
+
+if out is None:
+    st.markdown(
+        "👈 Configure a shock in the sidebar and press **Run simulation**. "
+        "Each run solves the FRB/US model fresh, so expect a few seconds "
+        "(longer under model-consistent expectations)."
+    )
+    st.markdown(
+        "See [`docs/use_cases.md`](https://github.com/willbtk/frb_us/blob/"
+        "main/docs/use_cases.md) for the range of analyses FRB/US supports and "
+        "which sit beyond this first-pass build."
+    )
+else:
     meta = out["meta"]
     st.subheader(f"{meta['shock']} — {meta['magnitude']} {meta['magnitude_unit']}, "
                  f"{meta['duration_quarters']}q, {meta['expectations'].upper()} expectations")
+    st.caption("Showing the most recent run (parameters above). Press **Run "
+               "simulation** to apply sidebar changes.")
 
     fig = _build_figure(out["active"], out["held"], out["window"], out["variables"])
     st.plotly_chart(fig, use_container_width=True)
 
     st.caption(
         "Solid = with policy response (active rule). Dashed = without response "
-        "(funds rate held at baseline). All values are deviations from baseline "
-        "in percentage points."
+        "(funds rate held at baseline). Deviations from baseline: percentage "
+        "points for rates/inflation, percent for level variables."
+    )
+
+    # -------------------- Summary: peak + effect at horizon -------------------- #
+    st.subheader("Summary — peak effect and effect at a chosen horizon")
+    _n = len(out["window"])
+    _hopts = [h for h in (1, 2, 4, 6, 8, 12, 16, 20, 24) if h < _n]
+    _hdefault = [h for h in (4, 8) if h in _hopts] or _hopts[:2]
+    horizons = st.multiselect(
+        "Effect this many quarters after the shock hits (0 = impact quarter)",
+        options=_hopts,
+        default=_hdefault,
+        help="Peak = the largest-magnitude deviation within the shown horizon, "
+        "and the quarter it occurs. The @Nq columns read the deviation N quarters "
+        "after the shock hits.",
+    )
+    summary = _summary_from_out(out, sorted({int(h) for h in horizons}))
+    st.dataframe(summary, use_container_width=True, hide_index=True)
+
+    stem = f"frbus_{meta['shock_key'].replace(':', '_')}_{meta['expectations']}_{meta['start']}"
+    st.download_button(
+        "⬇ Summary table (CSV)",
+        data=summary.to_csv(index=False).encode("utf-8"),
+        file_name=f"{stem}_summary.csv",
+        mime="text/csv",
     )
 
     # ------------------------------ Exports ------------------------------- #
     st.subheader("Export this run")
     ec1, ec2, ec3 = st.columns(3)
-    stem = f"frbus_{meta['shock_key'].replace(':', '_')}_{meta['expectations']}_{meta['start']}"
 
     ec1.download_button(
-        "⬇ Deviations (CSV)",
+        "⬇ Full paths (CSV)",
         data=out["csv"],
         file_name=f"{stem}.csv",
         mime="text/csv",
@@ -351,7 +423,7 @@ if run_clicked:
     )
 
     try:
-        png = fig.to_image(format="png", scale=2, width=1100, height=680)
+        png = fig.to_image(format="png", scale=2, width=1100, height=fig.layout.height or 680)
         ec2.download_button(
             "⬇ Chart (PNG)",
             data=png,
@@ -370,10 +442,8 @@ if run_clicked:
         use_container_width=True,
     )
 
-    with st.expander("Show deviation table"):
-        tidy = pd.concat(
-            {"active": out["active"], "held": out["held"]}, axis=1
-        )
+    with st.expander("Show full deviation table"):
+        tidy = pd.concat({"active": out["active"], "held": out["held"]}, axis=1)
         tidy.index = out["window"]
         st.dataframe(tidy.round(4), use_container_width=True)
 
@@ -383,14 +453,3 @@ if run_clicked:
             "Funds-rate hold mechanism: dmpex=1, dmpintay=0, rfffix=baseline rff, "
             "rff_trac=rffrule_trac=0 (the model's exogenous-rate switch)."
         )
-else:
-    st.markdown(
-        "👈 Configure a shock in the sidebar and press **Run simulation**. "
-        "Each run solves the FRB/US model fresh, so expect a few seconds "
-        "(longer under model-consistent expectations)."
-    )
-    st.markdown(
-        "See [`docs/use_cases.md`](https://github.com/willbtk/long_r_star/blob/"
-        "main/docs/use_cases.md) for the range of analyses FRB/US supports and "
-        "which sit beyond this first-pass build."
-    )

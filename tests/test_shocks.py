@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from frbus_shock import deviations, run_simulation
+from frbus_shock import deviations, run_simulation, summary_table
 from frbus_shock.shocks import CATALOGUE
 
 # One representative quarter to read the response at (index into the window).
@@ -69,6 +69,26 @@ def test_custom_shock_runs():
         custom_variable="eco", magnitude=0.01, duration=4, horizon=8
     )
     assert deviations(result, "active")["hggdp"].abs().max() > 0
+
+
+def test_summary_table_peak_and_horizons():
+    result = run_simulation("term_premium", magnitude=100.0, duration=4, horizon=16)
+    tbl = summary_table(result, ["hggdp", "rff", "xgdp"], horizons=(4, 8, 99))
+    # Expected columns exist.
+    assert {"peak", "peak_quarter", "@4q", "@8q", "@99q"}.issubset(tbl.columns)
+    # Horizons beyond the shown window are NaN.
+    assert tbl["@99q"].isna().all()
+    # The held funds-rate peak is ~0 (rate pinned at baseline).
+    held_rff = tbl[
+        tbl["variable"].str.contains("Federal funds")
+        & tbl["scenario"].str.contains("Without")
+    ]
+    assert abs(float(held_rff["peak"].iloc[0])) < 1e-6
+    # Peak magnitude is at least as large as the effect at any finite horizon.
+    for _, row in tbl.iterrows():
+        assert abs(row["peak"]) + 1e-9 >= abs(row["@4q"])
+    # xgdp is a level -> reported as a percent deviation.
+    assert (tbl["unit"] == "%").any()
 
 
 @pytest.mark.slow

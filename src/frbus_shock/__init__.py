@@ -35,6 +35,7 @@ from .outputs import (
     deviations,
     levels_panel,
     run_metadata,
+    summary_table,
     to_csv_bytes,
 )
 from .shocks import CATALOGUE, ShockSpec, custom_shock, get_shock
@@ -53,6 +54,7 @@ __all__ = [
     "deviation_panel",
     "levels_panel",
     "run_metadata",
+    "summary_table",
     "to_csv_bytes",
     "OUTPUT_VARS",
     "OUTPUT_CATALOGUE",

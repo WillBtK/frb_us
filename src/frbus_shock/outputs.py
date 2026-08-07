@@ -163,6 +163,47 @@ def levels_panel(
     return panel
 
 
+def summary_table(
+    result: SimResult,
+    variables: Optional[Sequence[str]] = None,
+    horizons: Sequence[int] = (4, 8),
+) -> pd.DataFrame:
+    """Peak-effect and selected-horizon summary, per variable and scenario.
+
+    For each requested variable and each scenario (active / held), reports:
+
+    * ``peak`` — the largest-magnitude deviation over the shown window, signed,
+      and ``peak_quarter`` — the quarter in which it occurs;
+    * ``@{h}q`` — the deviation ``h`` quarters after the shock hits (``h = 0`` is
+      the impact quarter). Horizons beyond the shown window come back as NaN.
+
+    Units follow each variable (percentage points for rates/inflation, percent
+    for level variables); the ``unit`` column records which.
+    """
+    keys = _resolve_vars(variables)
+    window = list(result.window)
+    n = len(window)
+    horizons = [int(h) for h in horizons]
+    rows = []
+    for scen, scen_label in SCENARIOS.items():
+        dev = deviations(result, scen, keys)
+        for key in keys:
+            var = OUTPUT_BY_KEY[key]
+            series = dev[key]
+            peak_idx = series.abs().idxmax()  # Period of the largest |deviation|
+            row = {
+                "variable": var.label,
+                "unit": var.unit,
+                "scenario": scen_label,
+                "peak": round(float(series.loc[peak_idx]), 3),
+                "peak_quarter": str(peak_idx),
+            }
+            for h in horizons:
+                row[f"@{h}q"] = round(float(series.iloc[h]), 3) if 0 <= h < n else float("nan")
+            rows.append(row)
+    return pd.DataFrame(rows)
+
+
 def run_metadata(result: SimResult) -> Dict[str, object]:
     """Compact, serialisable description of the run (for CSV headers / captions)."""
     return {
