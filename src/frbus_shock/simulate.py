@@ -20,12 +20,18 @@ from .shocks import ShockSpec, custom_shock, get_shock, with_defaults
 # Imported after model.py (which wires up sys.path for the vendored package).
 from pyfrbus.exceptions import ComputationError, ConvergenceError  # type: ignore  # noqa: E402
 
-# MCE (forward-looking) needs a long horizon so the terminal conditions — leads
-# returning to baseline — do not distort the displayed window. We solve out to
-# at least this many quarters past ``start`` under MCE, then slice. 60 quarters
-# (15 years) is enough for the shocks in the catalogue to decay while keeping the
-# stacked-time MCE Jacobian small enough for a Streamlit Community Cloud runtime.
-_MCE_MIN_SOLVE_QUARTERS = 60  # 15 years
+# MCE (forward-looking) needs lead room past the displayed window so the terminal
+# conditions — leads returning to baseline — do not distort it. Rather than always
+# solving to a long fixed horizon, we solve to a fixed buffer *beyond the display
+# window*, with an absolute floor. This keeps the common 20-quarter case light
+# (a ~40-quarter solve) while still giving ~5 years of terminal buffer.
+#
+# The stacked-time MCE Jacobian and peak memory scale strongly with this horizon
+# (≈740 MB at 40q vs ≈1150 MB at 60q), yet the displayed deviations are unchanged
+# to <0.01 pp across 40/48/60 — so the shorter, display-scaled horizon is both
+# faster and much easier on a memory-limited runtime (e.g. Streamlit Cloud).
+_MCE_TERMINAL_BUFFER = 20  # quarters of lead room past the displayed window
+_MCE_MIN_SOLVE_QUARTERS = 40  # absolute floor (10 years)
 
 DEFAULT_START = "2040Q1"
 DEFAULT_HORIZON = 20  # quarters displayed (5 years)
@@ -122,7 +128,7 @@ def run_simulation(
     start_p = pd.Period(start, freq="Q")
     disp_end = start_p + (horizon - 1)
     if expectations == "mce":
-        solve_end = max(disp_end, start_p + _MCE_MIN_SOLVE_QUARTERS)
+        solve_end = max(disp_end + _MCE_TERMINAL_BUFFER, start_p + _MCE_MIN_SOLVE_QUARTERS)
     else:
         solve_end = disp_end
 
