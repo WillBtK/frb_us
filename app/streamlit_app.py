@@ -177,11 +177,50 @@ expectations = st.sidebar.radio(
 if expectations == "mce":
     st.sidebar.warning("Model-consistent expectations solve over a long horizon and take longer.")
 
+def _start_quarter_options():
+    """Chronologically-sorted start quarters, defaulting to the current quarter.
+
+    The baseline is a fixed-vintage FRB/US projection, so "now" means the current
+    quarter *within that projection* — not data conditioned on realised recent
+    history. By ~2025 the baseline is already on its long-run path, so every
+    option here solves cleanly; "long-run" matches the Fed demos' 2040Q1
+    convention for textbook-clean impulse responses.
+    """
+    today_q = pd.Period(pd.Timestamp.today(), freq="Q")
+    proj_start = pd.Period("2022Q1", freq="Q")  # ~ baseline jump-off (data vintage)
+    vint = data_vintage() or {}
+    try:
+        last_obs = pd.Period(vint.get("last_obs", "2172Q1"), freq="Q")
+    except Exception:  # noqa: BLE001
+        last_obs = pd.Period("2172Q1", freq="Q")
+    near = min(max(today_q, proj_start), last_obs - 40)  # leave room for the horizon
+    longrun = pd.Period("2040Q1", freq="Q")
+    cands = [near, near + 4, near + 8, near + 20, longrun]
+    opts = sorted({p for p in cands if proj_start <= p <= last_obs - 8})
+    return [str(p) for p in opts], str(near), str(longrun)
+
+
+_START_OPTS, _START_NEAR, _START_LONGRUN = _start_quarter_options()
+
+
+def _fmt_start(s):
+    if s == _START_NEAR:
+        return f"{s} — now"
+    if s == _START_LONGRUN:
+        return f"{s} — long-run baseline"
+    return s
+
+
 start = st.sidebar.selectbox(
-    "Start quarter",
-    options=["2040Q1", "2035Q1", "2045Q1", "2030Q1"],
-    help="Simulations run off the model's projection baseline; a date well into "
-    "the projection avoids edge effects.",
+    "Start quarter (when the shock hits)",
+    options=_START_OPTS,
+    index=_START_OPTS.index(_START_NEAR),
+    format_func=_fmt_start,
+    help="The bundled baseline is a fixed ~2022-vintage FRB/US projection, so "
+    "'now' is the current quarter within that projection — not data updated with "
+    "realised recent history. By ~2025 the baseline sits on its long-run path, so "
+    "all choices give clean deviation paths; 'long-run' matches the Fed demos' "
+    "2040Q1 convention.",
 )
 horizon = st.sidebar.slider("Horizon (quarters shown)", 8, 40, 20)
 
@@ -209,7 +248,10 @@ st.info(
     "**Caveat:** the baseline projection in the Fed's dataset follows the FOMC's "
     "Summary of Economic Projections where available and a model-guided "
     "extrapolation beyond it. That extrapolation **is not a forecast** — treat "
-    "results as *deviations from a stylised baseline*, not predictions.",
+    "results as *deviations from a stylised baseline*, not predictions. The "
+    "bundled dataset is a fixed vintage (see the data range above; refreshed "
+    "periodically by CI), so a *now* start reflects that vintage's projection of "
+    "the present, not data updated with realised recent history.",
     icon="⚠️",
 )
 
