@@ -171,6 +171,20 @@ Each of these is a natural extension: the wrapper in `src/frbus_shock/` already
 loads the model under either expectations regime and manipulates the same
 add-factor / policy-switch surface these capabilities build on.
 
+### A note on LINVER (and why this dashboard uses the nonlinear model)
+
+The Fed also distributes **LINVER**, a *linearised* version of FRB/US. Because it
+is linear, simulations are matrix operations — orders of magnitude faster than
+the nonlinear model — which is why LINVER is the Fed's engine for **stochastic
+simulation** (thousands of draws) and **optimal-control** policy. For this
+dashboard's job — a handful of *single deterministic* shock paths — the nonlinear
+model is already fast (VAR runs in seconds), and it is more accurate: it respects
+the effective-lower-bound `max()` and other nonlinearities that a linearisation
+drops, which matter for larger shocks. LINVER is also a separate package, not part
+of PyFRB/US. So the deliberate choice here is the **nonlinear model** (VAR, or MCE
+when anticipation matters). LINVER would become the right tool *if* the scope grew
+into the fan-chart / optimal-control territory listed above.
+
 ---
 
 *Sources are linked inline. The authoritative home for FRB/US documentation,

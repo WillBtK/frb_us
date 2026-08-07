@@ -64,30 +64,20 @@ _HELD_COLOR = "#c1440e"  # rust — without response
 # Cached model runner — Streamlit reuses results across identical parameters.  #
 # --------------------------------------------------------------------------- #
 @st.cache_data(show_spinner=False, ttl=3600, max_entries=64)
-def _cached_run(
-    shock_key,
-    magnitude,
-    duration,
-    expectations,
-    start,
-    horizon,
-    custom_variable,
-    variables,
-):
-    """Run a simulation and return the deviation panels + metadata (picklable).
+def _cached_run(shocks_spec, expectations, start, horizon, variables):
+    """Run a (possibly multi-shock) simulation and return panels + metadata.
 
-    ``variables`` is a tuple of output keys; it is part of the cache key so a
-    different output selection re-slices without necessarily re-solving (the
-    heavy solve is itself memoised at the library level by run parameters).
+    ``shocks_spec`` is a tuple of ``(kind, name, magnitude, duration)`` — hashable
+    so it can be part of the cache key. ``variables`` is a tuple of output keys.
     """
+    shocks = []
+    for kind, name, mag, dur in shocks_spec:
+        if kind == "custom":
+            shocks.append({"custom_variable": name, "magnitude": mag, "duration": dur})
+        else:
+            shocks.append({"key": name, "magnitude": mag, "duration": dur})
     result = run_simulation(
-        shock_key=shock_key,
-        magnitude=magnitude,
-        duration=duration,
-        expectations=expectations,
-        start=start,
-        horizon=horizon,
-        custom_variable=custom_variable or None,
+        shocks=shocks, expectations=expectations, start=start, horizon=horizon
     )
     keys = list(variables)
     return {
@@ -182,37 +172,59 @@ def _summary_from_out(out, horizons):
 
 st.sidebar.title("Shock configuration")
 
-shock_labels = {k: v.label for k, v in CATALOGUE.items()}
-shock_labels["__custom__"] = "Custom variable…"
-shock_key = st.sidebar.selectbox(
-    "Shock type",
-    options=list(shock_labels),
-    format_func=lambda k: shock_labels[k],
+# Shock options ordered by group, plus an advanced raw-variable escape hatch.
+_SHOCK_GROUP_ORDER = ["Demand", "Prices & supply", "Financial", "Fiscal & monetary"]
+_SHOCK_KEYS = [k for g in _SHOCK_GROUP_ORDER for k, s in CATALOGUE.items() if s.group == g]
+_SHOCK_KEYS += [k for k in CATALOGUE if k not in _SHOCK_KEYS]  # any stragglers
+_SHOCK_OPTIONS = _SHOCK_KEYS + ["__custom__"]
+
+
+def _shock_option_label(k):
+    if k == "__custom__":
+        return "Advanced — raw FRB/US variable…"
+    s = CATALOGUE[k]
+    return f"{s.group} · {s.label}"
+
+
+n_shocks = st.sidebar.slider(
+    "Number of shocks", 1, 3, 1,
+    help="Apply several shocks at once — e.g. an oil-price spike together with a "
+    "fiscal expansion. Their effects combine in the same run.",
 )
 
-custom_variable = None
-if shock_key == "__custom__":
-    custom_variable = st.sidebar.text_input(
-        "FRB/US variable (endogenous name)",
-        value="eco",
-        help="The shock is applied to <variable>_aerr in native model units.",
+shock_specs = []  # (kind, name, magnitude, duration)
+for i in range(n_shocks):
+    if n_shocks > 1:
+        st.sidebar.markdown(f"**Shock {i + 1}**")
+    key = st.sidebar.selectbox(
+        "Type",
+        options=_SHOCK_OPTIONS,
+        index=min(i, len(_SHOCK_OPTIONS) - 2),
+        format_func=_shock_option_label,
+        key=f"shk_type_{i}",
     )
-    default_mag, default_dur, unit_label = 0.01, 4, "model units (native)"
-    st.sidebar.caption("Custom shocks are in native add-factor units — see docs.")
-else:
-    spec = CATALOGUE[shock_key]
-    default_mag, default_dur, unit_label = (
-        spec.default_magnitude,
-        spec.default_duration,
-        spec.user_unit,
+    if key == "__custom__":
+        name = st.sidebar.text_input(
+            "FRB/US variable (endogenous name)", value="eco", key=f"shk_var_{i}",
+            help="Shocks <variable>_aerr in native model units — for power users.",
+        )
+        dmag, ddur, unit, kind = 0.01, 4, "model units (native)", "custom"
+        st.sidebar.caption("Native add-factor units — see docs.")
+    else:
+        spec = CATALOGUE[key]
+        st.sidebar.caption(f"{spec.description} _{spec.sign_note}_")
+        dmag, ddur, unit, kind = spec.default_magnitude, spec.default_duration, spec.user_unit, "catalogue"
+        name = key
+    mag = st.sidebar.number_input(
+        f"Magnitude ({unit})", value=float(dmag),
+        step=abs(float(dmag)) / 4 or 0.1, key=f"shk_mag_{i}",
     )
-    st.sidebar.caption(spec.description)
-    st.sidebar.caption(f"↳ {spec.sign_note}")
-
-magnitude = st.sidebar.number_input(
-    f"Magnitude ({unit_label})", value=float(default_mag), step=abs(float(default_mag)) / 4 or 0.1
-)
-duration = st.sidebar.slider("Duration (quarters shock is held on)", 1, 20, int(default_dur))
+    dur = st.sidebar.slider(
+        "Duration (quarters on)", 1, 20, int(ddur), key=f"shk_dur_{i}"
+    )
+    shock_specs.append((kind, name, float(mag), int(dur)))
+    if n_shocks > 1 and i < n_shocks - 1:
+        st.sidebar.markdown("---")
 
 st.sidebar.divider()
 
@@ -343,13 +355,10 @@ if run_clicked:
     with st.spinner("Running FRB/US — solving baseline, active rule, and held-rate scenarios…"):
         try:
             out = _cached_run(
-                None if shock_key == "__custom__" else shock_key,
-                float(magnitude),
-                int(duration),
+                tuple(shock_specs),
                 expectations,
                 start,
                 int(horizon),
-                custom_variable,
                 tuple(selected_outputs),
             )
         except Exception as exc:  # noqa: BLE001 — surface solver/convergence errors
@@ -377,8 +386,9 @@ if out is None:
     )
 else:
     meta = out["meta"]
-    st.subheader(f"{meta['shock']} — {meta['magnitude']} {meta['magnitude_unit']}, "
-                 f"{meta['duration_quarters']}q, {meta['expectations'].upper()} expectations")
+    _n_sh = meta.get("n_shocks", 1)
+    _prefix = f"{_n_sh} shocks: " if _n_sh > 1 else ""
+    st.subheader(f"{_prefix}{meta['scenario']} · {meta['expectations'].upper()} expectations")
     st.caption("Showing the most recent run (parameters above). Press **Run "
                "simulation** to apply sidebar changes.")
 

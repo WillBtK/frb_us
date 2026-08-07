@@ -71,6 +71,26 @@ def test_custom_shock_runs():
     assert deviations(result, "active")["hggdp"].abs().max() > 0
 
 
+def test_multiple_shocks_combine():
+    """Several shocks applied together solve and combine (oil + fiscal)."""
+    from frbus_shock import run_metadata
+
+    result = run_simulation(
+        shocks=[
+            {"key": "oil", "magnitude": 10, "duration": 4},
+            {"key": "fiscal_spending", "magnitude": 1, "duration": 8},
+        ],
+        horizon=12,
+    )
+    meta = run_metadata(result)
+    assert meta["n_shocks"] == 2
+    dev = deviations(result, "active")
+    assert dev.notna().all().all()
+    assert dev["picnia"].iloc[3] > 0  # oil pushes inflation up
+    # The hold still pins the funds rate under multiple shocks.
+    assert deviations(result, "held")["rff"].abs().max() < 1e-6
+
+
 def test_summary_table_peak_and_horizons():
     result = run_simulation("term_premium", magnitude=100.0, duration=4, horizon=16)
     tbl = summary_table(result, ["hggdp", "rff", "xgdp"], horizons=(4, 8, 99))

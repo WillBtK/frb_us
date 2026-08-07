@@ -15,9 +15,14 @@ baseline) side by side.
 
 ## What it does
 
-- **Shocks** (each mapped to an FRB/US add-factor lever, empirically sign-checked):
-  fiscal spending, personal tax rate, oil/energy price, productivity (trend MFP),
-  financial/term-premium, a reference monetary shock, or a **custom** variable.
+- **Shocks** — a friendly-named library (19 shocks, each mapped to an FRB/US
+  add-factor lever and empirically sign-checked), grouped as **Demand** (household
+  consumption, durables, housing, business investment, exports, imports, federal
+  spending), **Prices & supply** (oil, core prices, import prices, house prices,
+  productivity), **Financial** (corporate & 10y term premia, equity premium,
+  mortgage rate, exchange rate), and **Fiscal & monetary** (tax rate, policy-rule
+  shock) — plus an advanced raw-variable option. **Up to three shocks can be
+  applied together** (e.g. an oil-price spike *and* a fiscal expansion).
 - **Expectations:** VAR-based (backward-looking) or **model-consistent /
   rational** (MCE, `mcap+wp` block).
 - **Monetary policy:** the active inertial Taylor rule vs. the funds rate held at

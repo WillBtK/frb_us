@@ -9,7 +9,7 @@ for GDP growth, unemployment, PCE inflation, and the funds rate are read.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import List, Optional, Sequence
 
 import pandas as pd
 
@@ -39,22 +39,49 @@ DEFAULT_HORIZON = 12  # quarters displayed (3 years) — shocks have largely pla
 
 
 @dataclass
+class ShockRequest:
+    """One shock in a (possibly multi-shock) scenario."""
+
+    spec: ShockSpec
+    magnitude: float
+    duration: int
+
+    def describe(self) -> str:
+        return f"{self.spec.label} {self.magnitude:g} {self.spec.user_unit}, {self.duration}q"
+
+
+@dataclass
 class SimResult:
     """Everything a caller needs to chart or export one run."""
 
-    shock: ShockSpec
-    magnitude: float
-    duration: int
+    requests: List[ShockRequest]  # one or more shocks applied together
     expectations: str
     start: pd.Period
     end: pd.Period  # last displayed quarter (inclusive)
     baseline: pd.DataFrame
-    active: pd.DataFrame  # shock + active policy rule (with response)
-    held: pd.DataFrame  # shock + funds rate held at baseline (without response)
+    active: pd.DataFrame  # shock(s) + active policy rule (with response)
+    held: pd.DataFrame  # shock(s) + funds rate held at baseline (without response)
 
     @property
     def window(self) -> pd.PeriodIndex:
         return pd.period_range(self.start, self.end, freq="Q")
+
+    # Backward-compatible single-shock accessors (first shock).
+    @property
+    def shock(self) -> ShockSpec:
+        return self.requests[0].spec
+
+    @property
+    def magnitude(self) -> float:
+        return self.requests[0].magnitude
+
+    @property
+    def duration(self) -> int:
+        return self.requests[0].duration
+
+    @property
+    def label(self) -> str:
+        return " + ".join(r.describe() for r in self.requests)
 
 
 def _fiscal_baseline_config(
@@ -91,14 +118,15 @@ def run_simulation(
     horizon: int = DEFAULT_HORIZON,
     custom_variable: Optional[str] = None,
     custom_label: Optional[str] = None,
+    shocks: Optional[Sequence[dict]] = None,
 ) -> SimResult:
-    """Run one shock twice — active rule and funds rate held — vs. baseline.
+    """Run a scenario twice — active rule and funds rate held — vs. baseline.
 
     Parameters
     ----------
     shock_key:
         A key from :data:`frbus_shock.shocks.CATALOGUE`. Ignored if
-        ``custom_variable`` is given.
+        ``custom_variable`` or ``shocks`` is given.
     magnitude, duration:
         Shock size (in the shock's user unit) and how many quarters it is held
         on. ``None`` falls back to the shock's defaults.
@@ -110,21 +138,21 @@ def run_simulation(
         Number of quarters to display (>= 1).
     custom_variable, custom_label:
         Shock an arbitrary ``<variable>_aerr`` instead of a catalogue entry.
+    shocks:
+        Apply **several shocks together**. A sequence of dicts, each with either
+        ``key`` (a catalogue key) or ``custom_variable``, plus optional
+        ``magnitude``/``duration``/``label``. Takes precedence over the
+        single-shock arguments. All shocks share the same start/expectations and
+        are added to the same dataset, so their effects combine.
     """
     if horizon < 1:
         raise ValueError("horizon must be at least 1 quarter")
     if expectations not in ("var", "mce"):
         raise ValueError("expectations must be 'var' or 'mce'")
 
-    # Resolve the shock specification and its magnitude/duration.
-    if custom_variable:
-        spec = custom_shock(custom_variable, magnitude or 0.0, duration or 1, custom_label)
-        mag = spec.default_magnitude if magnitude is None else magnitude
-        dur = spec.default_duration if duration is None else duration
-    else:
-        if not shock_key:
-            raise ValueError("provide either shock_key or custom_variable")
-        spec, mag, dur = with_defaults(get_shock(shock_key), magnitude, duration)
+    requests = _resolve_requests(
+        shocks, shock_key, magnitude, duration, custom_variable, custom_label
+    )
 
     start_p = pd.Period(start, freq="Q")
     disp_end = start_p + (horizon - 1)
@@ -142,23 +170,24 @@ def run_simulation(
     # Add factors so the model reproduces baseline exactly over the window.
     baseline_adds = frbus.init_trac(start_p, solve_end, data)
 
+    def _apply_all(df: pd.DataFrame) -> pd.DataFrame:
+        for req in requests:
+            df = req.spec.apply(df, req.magnitude, req.duration, start_p)
+        return df
+
     # --- Scenario 1: active policy rule (with monetary response) ---
     active_in = policy.apply_active_rule(baseline_adds.copy(), start_p, solve_end)
-    active_in = spec.apply(active_in, mag, dur, start_p)
-    active = _solve_robust(frbus, start_p, solve_end, active_in)
+    active = _solve_robust(frbus, start_p, solve_end, _apply_all(active_in))
 
     # --- Scenario 2: funds rate held at baseline (no monetary response) ---
     held_in = policy.apply_funds_rate_hold(
         baseline_adds.copy(), baseline_adds, start_p, solve_end
     )
-    held_in = spec.apply(held_in, mag, dur, start_p)
-    held = _solve_robust(frbus, start_p, solve_end, held_in)
+    held = _solve_robust(frbus, start_p, solve_end, _apply_all(held_in))
 
     sl = slice(start_p, disp_end)
     return SimResult(
-        shock=spec,
-        magnitude=mag,
-        duration=dur,
+        requests=requests,
         expectations=expectations,
         start=start_p,
         end=disp_end,
@@ -166,3 +195,37 @@ def run_simulation(
         active=active.loc[sl].copy(),
         held=held.loc[sl].copy(),
     )
+
+
+def _resolve_requests(
+    shocks, shock_key, magnitude, duration, custom_variable, custom_label
+) -> List[ShockRequest]:
+    """Build the list of ShockRequests from either ``shocks`` or legacy args."""
+    if shocks:
+        out: List[ShockRequest] = []
+        for s in shocks:
+            cv = s.get("custom_variable")
+            if cv:
+                spec = custom_shock(cv, s.get("magnitude") or 0.0, s.get("duration") or 1,
+                                    s.get("label"))
+            else:
+                key = s.get("key") or s.get("shock_key")
+                if not key:
+                    raise ValueError("each shock needs a 'key' or 'custom_variable'")
+                spec = get_shock(key)
+            spec, mag, dur = with_defaults(spec, s.get("magnitude"), s.get("duration"))
+            out.append(ShockRequest(spec, mag, dur))
+        if not out:
+            raise ValueError("shocks list is empty")
+        return out
+
+    if custom_variable:
+        spec = custom_shock(custom_variable, magnitude or 0.0, duration or 1, custom_label)
+        mag = spec.default_magnitude if magnitude is None else magnitude
+        dur = spec.default_duration if duration is None else duration
+        return [ShockRequest(spec, mag, dur)]
+
+    if not shock_key:
+        raise ValueError("provide shock_key, custom_variable, or shocks")
+    spec, mag, dur = with_defaults(get_shock(shock_key), magnitude, duration)
+    return [ShockRequest(spec, mag, dur)]

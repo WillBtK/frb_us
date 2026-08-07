@@ -40,20 +40,30 @@ class OutputVar:
 
 # Ordered catalogue, grouped. Order here is the display order within each group.
 OUTPUT_CATALOGUE: List[OutputVar] = [
-    # --- Activity ---
-    OutputVar("hggdp", "GDP growth (annual rate)", "Activity", "diff"),
-    OutputVar("xgap2", "Output gap", "Activity", "diff"),
-    OutputVar("lur", "Unemployment rate", "Activity", "diff"),
-    OutputVar("xgdp", "Real GDP (level)", "Activity", "pct"),
-    OutputVar("ecnia", "Real consumption (PCE)", "Activity", "pct"),
-    OutputVar("ebfi", "Business fixed investment", "Activity", "pct"),
-    # --- Inflation ---
-    OutputVar("picnia", "PCE inflation (q/q annualised)", "Inflation", "diff"),
-    OutputVar("picxfe", "Core PCE inflation", "Inflation", "diff"),
-    OutputVar("pic4", "PCE inflation (4-quarter)", "Inflation", "diff"),
-    OutputVar("picx4", "Core PCE inflation (4-quarter)", "Inflation", "diff"),
-    OutputVar("pcpi", "CPI inflation", "Inflation", "diff"),
-    OutputVar("pcpix", "Core CPI inflation", "Inflation", "diff"),
+    # --- Activity & spending ---
+    OutputVar("hggdp", "GDP growth (annual rate)", "Activity & spending", "diff"),
+    OutputVar("xgap2", "Output gap", "Activity & spending", "diff"),
+    OutputVar("lur", "Unemployment rate", "Activity & spending", "diff"),
+    OutputVar("lfpr", "Labour force participation rate", "Activity & spending", "diff"),
+    OutputVar("leh", "Civilian employment", "Activity & spending", "pct"),
+    OutputVar("xgdp", "Real GDP", "Activity & spending", "pct"),
+    OutputVar("xgdpn", "Nominal GDP", "Activity & spending", "pct"),
+    OutputVar("ecnia", "Household consumption (PCE)", "Activity & spending", "pct"),
+    OutputVar("ecd", "Consumer durables spending", "Activity & spending", "pct"),
+    OutputVar("eh", "Residential investment (housing)", "Activity & spending", "pct"),
+    OutputVar("ebfi", "Business fixed investment", "Activity & spending", "pct"),
+    OutputVar("ex", "Exports", "Activity & spending", "pct"),
+    OutputVar("emo", "Imports (ex. oil)", "Activity & spending", "pct"),
+    OutputVar("yh", "Real household income (after tax)", "Activity & spending", "pct"),
+    # --- Inflation & wages ---
+    OutputVar("picnia", "PCE inflation (q/q annualised)", "Inflation & wages", "diff"),
+    OutputVar("picxfe", "Core PCE inflation", "Inflation & wages", "diff"),
+    OutputVar("pic4", "PCE inflation (4-quarter)", "Inflation & wages", "diff"),
+    OutputVar("picx4", "Core PCE inflation (4-quarter)", "Inflation & wages", "diff"),
+    OutputVar("pcpi", "CPI inflation", "Inflation & wages", "diff"),
+    OutputVar("pcpix", "Core CPI inflation", "Inflation & wages", "diff"),
+    OutputVar("pigdp", "GDP-deflator inflation", "Inflation & wages", "diff"),
+    OutputVar("pieci", "Compensation growth (ECI)", "Inflation & wages", "diff"),
     # --- Interest rates ---
     OutputVar("rff", "Federal funds rate", "Interest rates", "diff"),
     OutputVar("rrff", "Real federal funds rate", "Interest rates", "diff"),
@@ -62,12 +72,25 @@ OUTPUT_CATALOGUE: List[OutputVar] = [
     OutputVar("rg30", "30-year Treasury yield", "Interest rates", "diff"),
     OutputVar("rbbb", "BBB corporate bond yield", "Interest rates", "diff"),
     OutputVar("rg10p", "10-year term premium", "Interest rates", "diff"),
+    OutputVar("rme", "Mortgage rate (30-year)", "Interest rates", "diff"),
+    OutputVar("rcar", "New-car loan rate", "Interest rates", "diff"),
+    # --- Financial & external ---
+    OutputVar("fpxr", "Real exchange rate (broad; up = stronger $)", "Financial & external", "pct"),
+    OutputVar("phouse", "House prices", "Financial & external", "pct"),
+    # --- Government ---
+    OutputVar("gfdbtn", "Federal debt (stock)", "Government", "pct"),
 ]
 
 OUTPUT_BY_KEY: Dict[str, OutputVar] = {v.key: v for v in OUTPUT_CATALOGUE}
 
 # Group display order.
-OUTPUT_GROUPS: List[str] = ["Activity", "Inflation", "Interest rates"]
+OUTPUT_GROUPS: List[str] = [
+    "Activity & spending",
+    "Inflation & wages",
+    "Interest rates",
+    "Financial & external",
+    "Government",
+]
 
 # The four headline defaults (unchanged behaviour).
 DEFAULT_OUTPUTS: List[str] = ["hggdp", "lur", "picnia", "rff"]
@@ -206,17 +229,28 @@ def summary_table(
 
 def run_metadata(result: SimResult) -> Dict[str, object]:
     """Compact, serialisable description of the run (for CSV headers / captions)."""
-    return {
-        "shock": result.shock.label,
-        "shock_key": result.shock.key,
-        "lever": result.shock.column,
-        "magnitude": result.magnitude,
-        "magnitude_unit": result.shock.user_unit,
-        "duration_quarters": result.duration,
+    shocks = [
+        {
+            "shock": r.spec.label,
+            "shock_key": r.spec.key,
+            "lever": r.spec.column,
+            "magnitude": r.magnitude,
+            "magnitude_unit": r.spec.user_unit,
+            "duration_quarters": r.duration,
+        }
+        for r in result.requests
+    ]
+    meta: Dict[str, object] = {
+        "scenario": result.label,
+        "n_shocks": len(result.requests),
+        "shocks": shocks,
         "expectations": result.expectations,
         "start": str(result.start),
         "end": str(result.end),
     }
+    # Flat single-shock keys for back-compat / simple captions (first shock).
+    meta.update({k: v for k, v in shocks[0].items()})
+    return meta
 
 
 def to_csv_bytes(

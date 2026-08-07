@@ -39,7 +39,13 @@ from .outputs import (
     to_csv_bytes,
 )
 from .shocks import CATALOGUE, ShockSpec, custom_shock, get_shock
-from .simulate import DEFAULT_HORIZON, DEFAULT_START, SimResult, run_simulation
+from .simulate import (
+    DEFAULT_HORIZON,
+    DEFAULT_START,
+    ShockRequest,
+    SimResult,
+    run_simulation,
+)
 
 __all__ = [
     "run_simulation",
@@ -48,6 +54,7 @@ __all__ = [
     "DEFAULT_HORIZON",
     "CATALOGUE",
     "ShockSpec",
+    "ShockRequest",
     "get_shock",
     "custom_shock",
     "deviations",

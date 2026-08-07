@@ -40,6 +40,7 @@ class ShockSpec:
     default_magnitude: float
     default_duration: int  # quarters the add factor is held on
     sign_note: str
+    group: str = "Other"  # display grouping in the UI
 
     def apply(
         self,
@@ -71,96 +72,92 @@ class ShockSpec:
 # Percentage / percentage-point -> fractional or log-point add factor.
 _PCT = 0.01
 
-CATALOGUE: Dict[str, ShockSpec] = {
-    "fiscal_spending": ShockSpec(
-        key="fiscal_spending",
-        label="Fiscal — federal spending",
-        description=(
-            "A change in real federal government purchases (EGFE), entered as a "
-            "percent of that spending. Positive = fiscal expansion."
-        ),
-        column="egfe_aerr",
-        user_unit="% of federal purchases",
-        unit_to_model=_PCT,  # log point ~= fractional change
-        default_magnitude=1.0,
-        default_duration=8,
-        sign_note="Higher spending raises GDP; the active rule leans against it.",
-    ),
-    "tax": ShockSpec(
-        key="tax",
-        label="Fiscal — personal tax rate",
-        description=(
-            "A change in the average personal income tax rate (TRP), entered in "
-            "percentage points. Positive = tax increase (contractionary)."
-        ),
-        column="trp_aerr",
-        user_unit="percentage points of the tax rate",
-        unit_to_model=_PCT,  # TRP is a fraction, so 1pp -> 0.01
-        default_magnitude=1.0,
-        default_duration=8,
-        sign_note=(
-            "A tax hike lowers GDP. Kept modest by design — large, sustained "
-            "tax-rate moves stress the model's fiscal-closure block."
-        ),
-    ),
-    "oil": ShockSpec(
-        key="oil",
-        label="Oil / energy price",
-        description=(
-            "A change in the relative price of imported oil (POILR), entered as "
-            "a percent. Positive = an oil-price spike (a supply shock)."
-        ),
-        column="poilr_aerr",
-        user_unit="% change in the oil price",
-        unit_to_model=_PCT,
-        default_magnitude=10.0,
-        default_duration=4,
-        sign_note="Raises inflation and lowers GDP (stagflationary).",
-    ),
-    "productivity": ShockSpec(
-        key="productivity",
-        label="Productivity (trend MFP)",
-        description=(
-            "A change in the level of trend multifactor productivity (MFPT), "
-            "entered as a percent. Positive = a favourable supply shock."
-        ),
-        column="mfpt_aerr",
-        user_unit="% change in MFP level",
-        unit_to_model=_PCT,
-        default_magnitude=1.0,
-        default_duration=1,
-        sign_note="Raises GDP and lowers inflation; the rule eases.",
-    ),
-    "term_premium": ShockSpec(
-        key="term_premium",
-        label="Financial — corporate risk/term premium",
-        description=(
-            "A change in the BBB corporate bond risk/term premium (RBBBP), "
-            "entered in basis points. Positive = tighter financial conditions."
-        ),
-        column="rbbbp_aerr",
-        user_unit="basis points",
-        unit_to_model=_PCT,  # 100 bp -> 1.0 pp
-        default_magnitude=100.0,
-        default_duration=4,
-        sign_note="A wider premium tightens conditions and lowers GDP.",
-    ),
-    "monetary": ShockSpec(
-        key="monetary",
-        label="Monetary policy shock (reference)",
-        description=(
-            "A direct shock to the policy rule (RFFINTAY), entered in basis "
-            "points. This is the shock used in the Fed's own demo/validation "
-            "case. With the funds rate held, this shock has little meaning."
-        ),
-        column="rffintay_aerr",
-        user_unit="basis points",
-        unit_to_model=_PCT,
-        default_magnitude=100.0,
-        default_duration=1,
-        sign_note="A surprise tightening lowers GDP (the example1 demo).",
-    ),
-}
+def _spec(key, label, group, column, user_unit, unit_to_model, mag, dur, sign_note, desc):
+    return ShockSpec(
+        key=key, label=label, group=group, column=column, user_unit=user_unit,
+        unit_to_model=unit_to_model, default_magnitude=mag, default_duration=dur,
+        sign_note=sign_note, description=desc,
+    )
+
+
+# Friendly-named shock library. Keys are stable (used by tests / saved runs);
+# labels are what the dashboard shows. Levers, units, and signs were all
+# confirmed empirically against the model (see tests/test_shocks.py).
+CATALOGUE: Dict[str, ShockSpec] = {s.key: s for s in [
+    # --- Demand ---
+    _spec("consumption", "Household consumption", "Demand", "eco_aerr",
+          "% of that spending", _PCT, 1.0, 4,
+          "A spending boost raises GDP and inflation.",
+          "A change in real household spending on non-durables and services."),
+    _spec("durables", "Consumer durables spending", "Demand", "ecd_aerr",
+          "%", _PCT, 2.0, 4, "Higher durables demand raises GDP.",
+          "A change in real consumer spending on durable goods."),
+    _spec("housing", "Residential investment (housing)", "Demand", "eh_aerr",
+          "%", _PCT, 2.0, 4, "More homebuilding raises GDP.",
+          "A change in real residential investment."),
+    _spec("business_investment", "Business investment", "Demand", "ebfi_aerr",
+          "%", _PCT, 2.0, 4, "Stronger capex raises GDP.",
+          "A change in real business fixed investment."),
+    _spec("exports", "Exports", "Demand", "ex_aerr",
+          "%", _PCT, 2.0, 4, "Stronger exports raise GDP.",
+          "A change in real exports (e.g. stronger foreign demand)."),
+    _spec("imports", "Imports (ex. oil)", "Demand", "emo_aerr",
+          "%", _PCT, 2.0, 4, "Higher imports subtract from GDP.",
+          "A change in real non-oil imports."),
+    _spec("fiscal_spending", "Federal government spending", "Demand", "egfe_aerr",
+          "% of federal purchases", _PCT, 1.0, 8,
+          "Higher spending raises GDP; the active rule leans against it.",
+          "A change in real federal government purchases. Positive = expansion."),
+    # --- Prices & supply ---
+    _spec("oil", "Oil / energy price", "Prices & supply", "poilr_aerr",
+          "% change in the oil price", _PCT, 10.0, 4,
+          "Raises inflation and lowers GDP (stagflationary).",
+          "A change in the relative price of imported oil."),
+    _spec("core_prices", "Core consumer prices", "Prices & supply", "picxfe_aerr",
+          "pp (annualised inflation impulse)", 1.0, 0.5, 4,
+          "A cost-push impulse: raises inflation, small drag on GDP.",
+          "A direct impulse to core PCE inflation (a cost-push shock)."),
+    _spec("import_prices", "Import prices (ex. oil)", "Prices & supply", "pmo_aerr",
+          "%", _PCT, 5.0, 4, "Raises inflation; mild GDP effects.",
+          "A change in the price of non-oil imports."),
+    _spec("house_prices", "House prices", "Prices & supply", "phouse_aerr",
+          "%", _PCT, 5.0, 4, "Higher house prices lift wealth and demand.",
+          "A change in the house-price index."),
+    _spec("productivity", "Productivity (trend MFP)", "Prices & supply", "mfpt_aerr",
+          "% change in MFP level", _PCT, 1.0, 1,
+          "Raises GDP and lowers inflation; the rule eases.",
+          "A change in the level of trend multifactor productivity."),
+    # --- Financial ---
+    _spec("term_premium", "Corporate bond risk premium", "Financial", "rbbbp_aerr",
+          "basis points", _PCT, 100.0, 4,
+          "A wider premium tightens conditions and lowers GDP.",
+          "A change in the BBB corporate bond risk/term premium."),
+    _spec("term_premium_10y", "10-year Treasury term premium", "Financial", "rg10p_aerr",
+          "basis points", _PCT, 100.0, 4, "Higher long rates lower GDP.",
+          "A change in the 10-year Treasury term premium."),
+    _spec("equity_premium", "Equity risk premium", "Financial", "reqp_aerr",
+          "basis points", _PCT, 100.0, 4,
+          "A higher premium lowers equity wealth and demand.",
+          "A change in the required equity risk premium (an equity-price shock)."),
+    _spec("mortgage_rate", "Mortgage rate", "Financial", "rme_aerr",
+          "basis points", _PCT, 100.0, 4, "Dearer mortgages weigh on housing/GDP.",
+          "A change in the conventional mortgage rate."),
+    _spec("exchange_rate", "Real exchange rate (broad)", "Financial", "fpxr_aerr",
+          "% (up = stronger $)", _PCT, 5.0, 4,
+          "A stronger dollar trims net exports and inflation.",
+          "A change in the broad real exchange rate. Positive = appreciation."),
+    # --- Fiscal & monetary ---
+    _spec("tax", "Personal tax rate", "Fiscal & monetary", "trp_aerr",
+          "percentage points of the tax rate", _PCT, 1.0, 8,
+          "A tax hike lowers GDP. Kept modest — large sustained moves stress "
+          "the fiscal-closure block.",
+          "A change in the average personal income tax rate. Positive = hike."),
+    _spec("monetary", "Monetary policy shock (funds-rate rule)", "Fiscal & monetary",
+          "rffintay_aerr", "basis points", _PCT, 100.0, 1,
+          "A surprise tightening lowers GDP (the example1 demo). Meaningless "
+          "when the funds rate is held.",
+          "A direct shock to the policy rule. This is the Fed demo/validation case."),
+]}
 
 
 def get_shock(key: str) -> ShockSpec:
@@ -198,6 +195,7 @@ def custom_shock(
         default_magnitude=magnitude,
         default_duration=duration,
         sign_note="User-defined; interpret with care.",
+        group="Advanced (raw variable)",
     )
 
 
