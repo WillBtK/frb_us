@@ -271,7 +271,12 @@ start = st.sidebar.selectbox(
     "Every option solves cleanly; 'long-run' matches the Fed demos' 2040Q1 "
     "convention for textbook-clean impulse responses.",
 )
-horizon = st.sidebar.slider("Horizon (quarters shown)", 8, 40, 20)
+horizon = st.sidebar.slider(
+    "Horizon (quarters shown)", 4, 12, 12,
+    help="How many quarters to display. Capped at 12 (3 years): shocks have "
+    "largely played out by then, and further out is swamped by other events. "
+    "A shorter window also makes model-consistent (MCE) runs lighter and faster.",
+)
 
 st.sidebar.divider()
 
@@ -389,7 +394,7 @@ else:
     # -------------------- Summary: peak + effect at horizon -------------------- #
     st.subheader("Summary — peak effect and effect at a chosen horizon")
     _n = len(out["window"])
-    _hopts = [h for h in (1, 2, 4, 6, 8, 12, 16, 20, 24) if h < _n]
+    _hopts = [h for h in (1, 2, 3, 4, 6, 8, 10, 12, 16, 20) if h < _n]
     _hdefault = [h for h in (4, 8) if h in _hopts] or _hopts[:2]
     horizons = st.multiselect(
         "Effect this many quarters after the shock hits (0 = impact quarter)",

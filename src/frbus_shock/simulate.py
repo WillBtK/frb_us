@@ -21,20 +21,21 @@ from .shocks import ShockSpec, custom_shock, get_shock, with_defaults
 from pyfrbus.exceptions import ComputationError, ConvergenceError  # type: ignore  # noqa: E402
 
 # MCE (forward-looking) needs lead room past the displayed window so the terminal
-# conditions — leads returning to baseline — do not distort it. Rather than always
-# solving to a long fixed horizon, we solve to a fixed buffer *beyond the display
-# window*, with an absolute floor. This keeps the common 20-quarter case light
-# (a ~40-quarter solve) while still giving ~5 years of terminal buffer.
-#
-# The stacked-time MCE Jacobian and peak memory scale strongly with this horizon
-# (≈740 MB at 40q vs ≈1150 MB at 60q), yet the displayed deviations are unchanged
-# to <0.01 pp across 40/48/60 — so the shorter, display-scaled horizon is both
-# faster and much easier on a memory-limited runtime (e.g. Streamlit Cloud).
-_MCE_TERMINAL_BUFFER = 20  # quarters of lead room past the displayed window
-_MCE_MIN_SOLVE_QUARTERS = 40  # absolute floor (10 years)
+# conditions — leads returning to baseline — do not distort it. We solve to a
+# fixed buffer *beyond the display window*, with an absolute floor, rather than to
+# a long fixed horizon. The stacked-time MCE Jacobian and peak memory scale
+# strongly with this horizon, yet the displayed deviations barely move: over a
+# 12-quarter window, hggdp differs by <0.008 pp across 28/40/60-quarter solves —
+# even for the most persistent shocks (productivity, fiscal) — while peak memory
+# falls from ≈1150 MB (60q) to ≈590 MB (28q). A 16-quarter buffer past the shown
+# window keeps the default 12-quarter (3-year) view at a ~28-quarter solve, which
+# fits comfortably on a memory-limited runtime (e.g. Streamlit Cloud) and is far
+# faster and less variable.
+_MCE_TERMINAL_BUFFER = 16  # quarters of lead room past the displayed window
+_MCE_MIN_SOLVE_QUARTERS = 24  # absolute floor (6 years)
 
 DEFAULT_START = "2040Q1"
-DEFAULT_HORIZON = 20  # quarters displayed (5 years)
+DEFAULT_HORIZON = 12  # quarters displayed (3 years) — shocks have largely played out
 
 
 @dataclass
