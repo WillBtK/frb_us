@@ -1,0 +1,38 @@
+MIT License
+
+Copyright (c) 2026 long_r_star contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+--------------------------------------------------------------------------------
+
+Third-party components:
+
+* third_party/pyfrbus/ — the PyFRB/US package and the FRB/US model equations
+  (models/model.xml) are works of the U.S. Federal Reserve Board, prepared by a
+  U.S. Government employee and therefore in the PUBLIC DOMAIN (see
+  third_party/pyfrbus/LICENSE). Minor compatibility patches applied to that code
+  are documented in third_party/pyfrbus/PATCHES.md and are likewise dedicated to
+  the public domain.
+
+* data/LONGBASE.TXT — the FRB/US public dataset, distributed by the Federal
+  Reserve Board (public domain).
+
+The MIT license above applies to the original code in this repository (the
+frbus_shock package, the Streamlit app, tests, and workflows).

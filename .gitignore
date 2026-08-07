@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Local scratch / vendored download area (the mirror clone used to build this
+# repo). The *authoritative* vendored copy lives in third_party/pyfrbus/ and IS
+# tracked; this scratch dir is not.
+vendor/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Streamlit local secrets
+.streamlit/secrets.toml
+
+# Generated exports
+exports/
+*.png.tmp

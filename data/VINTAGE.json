@@ -1,0 +1,9 @@
+{
+  "source_file": "LONGBASE.TXT",
+  "provenance": "Federal Reserve FRB/US data_only_package (vintage vendored via public-domain pyfrbus mirror ~2022; refreshed by .github/workflows/refresh-data.yml)",
+  "sha256": "a7652eef1f33c9b945b03e05053e6bc3c3269923e914d7d63aaa5fea77cf25d4",
+  "n_variables": 369,
+  "n_observations": 841,
+  "first_obs": "1962Q1",
+  "last_obs": "2172Q1"
+}

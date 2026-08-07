@@ -1,0 +1,110 @@
+name: Refresh LONGBASE data
+
+# Periodically check the Fed's *data-only* package and refresh data/LONGBASE.TXT
+# when it changes. The FRB/US database updates more often than the model
+# equations, so this workflow touches ONLY the data — never the model/equations
+# package in third_party/pyfrbus/, which is a manual, reviewed bump because it
+# changes the model's behaviour.
+
+on:
+  schedule:
+    # 07:15 UTC every Monday. The Fed refreshes the dataset roughly quarterly
+    # (around the SEP / data releases), so a weekly check comfortably catches it.
+    - cron: "15 7 * * 1"
+  workflow_dispatch: {} # allow manual runs
+
+permissions:
+  contents: write
+
+concurrency:
+  group: refresh-data
+  cancel-in-progress: false
+
+env:
+  DATA_ZIP_URL: "https://www.federalreserve.gov/econres/files/data_only_package.zip"
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download the Fed data-only package
+        id: download
+        run: |
+          set -euo pipefail
+          mkdir -p _refresh
+          echo "Downloading $DATA_ZIP_URL"
+          # Retry with backoff; the Fed site occasionally rate-limits.
+          for attempt in 1 2 3 4; do
+            if curl -fsSL --retry 2 -o _refresh/data_only_package.zip "$DATA_ZIP_URL"; then
+              break
+            fi
+            echo "attempt $attempt failed; sleeping $((attempt * 5))s"
+            sleep $((attempt * 5))
+          done
+          test -s _refresh/data_only_package.zip
+          unzip -o -q _refresh/data_only_package.zip -d _refresh/unzipped
+          # Locate LONGBASE.TXT anywhere inside the package.
+          found="$(find _refresh/unzipped -iname 'LONGBASE.TXT' | head -n1)"
+          if [ -z "$found" ]; then
+            echo "::error::LONGBASE.TXT not found in the downloaded package"
+            exit 1
+          fi
+          echo "found=$found" >> "$GITHUB_OUTPUT"
+
+      - name: Compare with the committed copy
+        id: compare
+        run: |
+          set -euo pipefail
+          new="${{ steps.download.outputs.found }}"
+          old="data/LONGBASE.TXT"
+          new_sha="$(sha256sum "$new" | awk '{print $1}')"
+          old_sha="$(sha256sum "$old" 2>/dev/null | awk '{print $1}' || echo none)"
+          echo "old_sha=$old_sha"
+          echo "new_sha=$new_sha"
+          if [ "$new_sha" = "$old_sha" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "new_sha=$new_sha" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Update data + vintage metadata
+        if: steps.compare.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          cp "${{ steps.download.outputs.found }}" data/LONGBASE.TXT
+          python - <<'PY'
+          import csv, hashlib, json
+          p = "data/LONGBASE.TXT"
+          h = hashlib.sha256(open(p, "rb").read()).hexdigest()
+          with open(p) as f:
+              r = csv.reader(f); hdr = next(r); rows = [row[0] for row in r]
+          meta = {
+              "source_file": "LONGBASE.TXT",
+              "provenance": "Federal Reserve FRB/US data_only_package "
+              "(auto-refreshed by .github/workflows/refresh-data.yml)",
+              "sha256": h,
+              "n_variables": len(hdr) - 1,
+              "n_observations": len(rows),
+              "first_obs": rows[0].strip('"'),
+              "last_obs": rows[-1].strip('"'),
+          }
+          json.dump(meta, open("data/VINTAGE.json", "w"), indent=2)
+          print(json.dumps(meta, indent=2))
+          PY
+
+      - name: Commit refreshed data
+        if: steps.compare.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/LONGBASE.TXT data/VINTAGE.json
+          git commit -m "data: refresh LONGBASE from Fed data-only package (sha ${{ steps.compare.outputs.new_sha }})"
+          git push
+
+      - name: Report no-op
+        if: steps.compare.outputs.changed == 'false'
+        run: echo "LONGBASE.TXT is unchanged — nothing to commit."

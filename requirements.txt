@@ -1,0 +1,25 @@
+# Runtime dependencies for the FRB/US shock dashboard.
+#
+# Pinned to a stack that (a) runs the vendored PyFRB/US 1.0.0 model unchanged
+# on Python 3.11 and (b) installs from wheels only — no SuiteSparse / swig /
+# scikit-umfpack native build — so it deploys to Streamlit Community Cloud with
+# no system packages. See third_party/pyfrbus/PATCHES.md for why these pins
+# matter (pandas 3.0 / numpy 2.0 break the 2022-era model code).
+
+# --- Scientific stack that PyFRB/US runs on ---
+numpy==1.26.4
+scipy==1.11.4
+pandas==1.5.3
+sympy==1.12
+symengine==0.11.0
+networkx==3.1
+lxml==5.2.2
+matplotlib==3.7.5
+typing_extensions==4.16.0
+multiprocess==0.70.19
+dill==0.4.1
+
+# --- Dashboard ---
+streamlit==1.39.0
+plotly==5.24.1
+kaleido==0.2.1

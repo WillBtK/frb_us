@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "frbus-shock-dashboard"
+version = "0.1.0"
+description = "Interactive US macro shock-analysis dashboard built on the Federal Reserve's FRB/US model (PyFRB/US)."
+readme = "README.md"
+requires-python = ">=3.10,<3.13"
+license = { text = "MIT" }
+authors = [{ name = "long_r_star contributors" }]
+keywords = ["FRB/US", "pyfrbus", "macroeconomics", "monetary policy", "streamlit"]
+
+# Runtime dependencies are pinned in requirements.txt (the source of truth for
+# Streamlit Community Cloud). The loose ranges here just document intent for a
+# plain ``pip install .``; prefer ``pip install -r requirements.txt``.
+dependencies = [
+  "numpy>=1.26,<2",
+  "scipy>=1.11,<1.13",
+  "pandas>=1.5,<2",
+  "sympy>=1.12,<1.13",
+  "symengine>=0.11,<0.12",
+  "networkx>=3,<4",
+  "lxml>=5",
+  "matplotlib>=3.7,<3.9",
+  "typing_extensions>=4",
+  "multiprocess>=0.70",
+  "streamlit>=1.36,<2",
+  "plotly>=5.22,<6",
+  "kaleido==0.2.1",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+markers = [
+  "slow: marks slow tests (e.g. model-consistent expectations solves)",
+]

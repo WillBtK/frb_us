@@ -1,0 +1,16 @@
+# Streamlit configuration for local runs and Streamlit Community Cloud.
+
+[theme]
+base = "light"
+primaryColor = "#1f4e79"        # Fed-blue accent
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f2f5f9"
+font = "sans serif"
+
+[server]
+# FRB/US runs can take several seconds (longer under MCE); allow generous limits.
+maxUploadSize = 5
+enableXsrfProtection = true
+
+[browser]
+gatherUsageStats = false
