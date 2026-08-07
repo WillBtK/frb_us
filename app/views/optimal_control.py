@@ -61,6 +61,16 @@ st.caption(
 
 _DEMAND = [k for k, s in CATALOGUE.items() if s.group in ("Demand", "Prices & supply")]
 
+# Loss-weight presets from the literature: (inflation, unemployment, smoothing).
+_PRESETS = {
+    "Balanced dual mandate (Fed / Yellen 2012)": (1.0, 1.0, 0.5),
+    "Inflation-focused (hawkish)": (2.0, 1.0, 0.5),
+    "Employment-focused (dovish)": (1.0, 2.0, 0.5),
+    "Aggressive (little rate smoothing)": (1.0, 1.0, 0.1),
+    "Gradualist (heavy rate smoothing)": (1.0, 1.0, 1.5),
+}
+_DEFAULT_PRESET = "Balanced dual mandate (Fed / Yellen 2012)"
+
 # --- Row 1: the shock to stabilise ---
 _r1 = st.columns([2, 1, 1])
 shock_key = _r1[0].selectbox(
@@ -80,20 +90,64 @@ duration = _r1[2].number_input(
     "Duration (q)", min_value=1, max_value=12, value=int(spec.default_duration), step=1,
 )
 
-# --- Row 2: loss weights + settings ---
-_r2 = st.columns(5)
-w_pi = _r2[0].slider("Inflation weight", 0.0, 3.0, 1.0, 0.1)
-w_u = _r2[1].slider("Unemployment weight", 0.0, 3.0, 1.0, 0.1)
-w_sm = _r2[2].slider("Rate smoothing", 0.0, 2.0, 0.5, 0.1,
-                     help="Penalty on quarter-to-quarter funds-rate changes.")
-expectations = _r2[3].selectbox(
+# --- Row 2: preset + settings ---
+# Seed the weight sliders' state once, then let a newly-chosen preset update them.
+for _k, _v in (("ocp_wpi", 1.0), ("ocp_wu", 1.0), ("ocp_wsm", 0.5)):
+    st.session_state.setdefault(_k, _v)
+
+_r2 = st.columns([2, 1, 1])
+preset = _r2[0].selectbox(
+    "Loss-weight preset", ["Custom"] + list(_PRESETS),
+    index=1 + list(_PRESETS).index(_DEFAULT_PRESET),
+    help="Named weightings spanning the mainstream range — see 'How to choose "
+    "the weights' below. Pick one, then fine-tune the sliders if you like.",
+)
+if preset != "Custom" and st.session_state.get("_ocp_preset") != preset:
+    (st.session_state["ocp_wpi"],
+     st.session_state["ocp_wu"],
+     st.session_state["ocp_wsm"]) = _PRESETS[preset]
+st.session_state["_ocp_preset"] = preset
+
+expectations = _r2[1].selectbox(
     "Expectations", options=["var", "mce"],
     format_func=lambda k: {"var": "VAR (fast)", "mce": "Model-consistent (slow)"}[k],
 )
-horizon = _r2[4].selectbox("Horizon (q)", [8, 9, 10, 11, 12], index=4)
+horizon = _r2[2].selectbox("Horizon (q)", [8, 9, 10, 11, 12], index=4)
+
+# --- Row 3: the three loss weights (driven by the preset, editable) ---
+_r3 = st.columns(3)
+w_pi = _r3[0].slider("Inflation-gap weight", 0.0, 3.0, step=0.1, key="ocp_wpi")
+w_u = _r3[1].slider("Unemployment-gap weight", 0.0, 3.0, step=0.1, key="ocp_wu")
+w_sm = _r3[2].slider("Rate-smoothing weight", 0.0, 2.0, step=0.1, key="ocp_wsm",
+                     help="Penalty on quarter-to-quarter funds-rate changes.")
+
 if expectations == "mce":
     st.caption("⏳ MCE builds the full anticipation matrix — one solve per quarter, a couple of minutes.")
 st.caption(f"↳ {spec.description}")
+
+with st.expander("How to choose the weights"):
+    st.markdown(
+        "The loss penalises squared deviations of **inflation** and **unemployment** "
+        "from baseline (target), plus squared **quarter-to-quarter changes in the "
+        "funds rate**. Only the *relative* weights matter for the optimal path.\n\n"
+        "- **Balanced dual mandate (default).** Equal weight on the inflation and "
+        "unemployment gaps — the canonical Fed case, used in Yellen's 2012 "
+        "optimal-control speeches and the FRB/US FEDS Note; it treats the two legs "
+        "of the statutory dual mandate symmetrically.\n"
+        "- **More weight on inflation (hawkish).** Prioritises price stability and "
+        "keeping inflation expectations anchored — welfare-based New-Keynesian "
+        "analyses often imply inflation variability is especially costly. The "
+        "optimum tolerates a larger unemployment gap to return inflation faster.\n"
+        "- **More weight on unemployment (dovish).** Prioritises closing "
+        "labour-market slack (the human cost of unemployment, hysteresis risk). The "
+        "optimum eases more and accepts a little more inflation deviation.\n"
+        "- **Rate-smoothing weight.** The Fed moves rates gradually in practice. A "
+        "higher weight gives a gentler, more inertial funds-rate path; a lower "
+        "weight gives a more front-loaded, aggressive optimum.\n\n"
+        "There is no single 'right' answer — the presets bracket the mainstream "
+        "range. Start from *Balanced* and lean toward whichever objective you judge "
+        "more costly."
+    )
 
 run = st.button("▶ Optimise policy", type="primary")
 st.divider()
