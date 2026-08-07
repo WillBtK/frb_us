@@ -1,10 +1,15 @@
 name: Refresh LONGBASE data
 
-# Periodically check the Fed's *data-only* package and refresh data/LONGBASE.TXT
-# when it changes. The FRB/US database updates more often than the model
-# equations, so this workflow touches ONLY the data — never the model/equations
-# package in third_party/pyfrbus/, which is a manual, reviewed bump because it
-# changes the model's behaviour.
+# Light, regular check for a newer Fed *data-only* package, refreshing
+# data/LONGBASE.TXT when it changes. This touches ONLY the data — never the
+# model/equations in third_party/pyfrbus/, which is a manual, reviewed bump
+# because it changes the model's behaviour.
+#
+# Steady-state cost is a single HEAD request: the job downloads the (few-MB)
+# package only when the server's Last-Modified differs from the one we last
+# ingested (recorded in data/VINTAGE.json). When LONGBASE actually changes it
+# also re-baselines the strict validation goldens (scripts/regen_goldens.py) so
+# an unattended data update never leaves CI stale.
 
 on:
   schedule:
@@ -29,54 +34,70 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download the Fed data-only package
-        id: download
+      - name: Light check — has the package changed? (HEAD)
+        id: head
+        run: |
+          set -euo pipefail
+          stored="$(python -c "import json;print(json.load(open('data/VINTAGE.json')).get('source_last_modified',''))" 2>/dev/null || echo '')"
+          # Best-effort: read Last-Modified without downloading the body.
+          lm="$(curl -fsSIL --retry 3 "$DATA_ZIP_URL" | tr -d '\r' \
+                | awk -F': ' 'tolower($1)=="last-modified"{v=$2} END{print v}')"
+          echo "stored last-modified: '${stored}'"
+          echo "server last-modified: '${lm}'"
+          echo "last_modified=${lm}" >> "$GITHUB_OUTPUT"
+          # Proceed to download unless we have a stored marker that matches.
+          if [ -n "$lm" ] && [ "$lm" = "$stored" ]; then
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+            echo "No newer package (Last-Modified unchanged)."
+          else
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download & compare LONGBASE
+        id: compare
+        if: steps.head.outputs.proceed == 'true'
         run: |
           set -euo pipefail
           mkdir -p _refresh
-          echo "Downloading $DATA_ZIP_URL"
-          # Retry with backoff; the Fed site occasionally rate-limits.
           for attempt in 1 2 3 4; do
             if curl -fsSL --retry 2 -o _refresh/data_only_package.zip "$DATA_ZIP_URL"; then
               break
             fi
-            echo "attempt $attempt failed; sleeping $((attempt * 5))s"
-            sleep $((attempt * 5))
+            echo "attempt $attempt failed; sleeping $((attempt * 5))s"; sleep $((attempt * 5))
           done
           test -s _refresh/data_only_package.zip
           unzip -o -q _refresh/data_only_package.zip -d _refresh/unzipped
-          # Locate LONGBASE.TXT anywhere inside the package.
           found="$(find _refresh/unzipped -iname 'LONGBASE.TXT' | head -n1)"
           if [ -z "$found" ]; then
-            echo "::error::LONGBASE.TXT not found in the downloaded package"
-            exit 1
+            echo "::error::LONGBASE.TXT not found in the downloaded package"; exit 1
           fi
+          new_sha="$(sha256sum "$found" | awk '{print $1}')"
+          old_sha="$(sha256sum data/LONGBASE.TXT 2>/dev/null | awk '{print $1}' || echo none)"
           echo "found=$found" >> "$GITHUB_OUTPUT"
-
-      - name: Compare with the committed copy
-        id: compare
-        run: |
-          set -euo pipefail
-          new="${{ steps.download.outputs.found }}"
-          old="data/LONGBASE.TXT"
-          new_sha="$(sha256sum "$new" | awk '{print $1}')"
-          old_sha="$(sha256sum "$old" 2>/dev/null | awk '{print $1}' || echo none)"
-          echo "old_sha=$old_sha"
-          echo "new_sha=$new_sha"
           if [ "$new_sha" = "$old_sha" ]; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "LONGBASE content unchanged."
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
-            echo "new_sha=$new_sha" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Update data + vintage metadata
+      - name: Set up Python
         if: steps.compare.outputs.changed == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Update data, vintage metadata, and validation goldens
+        if: steps.compare.outputs.changed == 'true'
+        env:
+          LAST_MODIFIED: ${{ steps.head.outputs.last_modified }}
         run: |
           set -euo pipefail
-          cp "${{ steps.download.outputs.found }}" data/LONGBASE.TXT
+          cp "${{ steps.compare.outputs.found }}" data/LONGBASE.TXT
           python - <<'PY'
-          import csv, hashlib, json
+          import csv, hashlib, json, os
           p = "data/LONGBASE.TXT"
           h = hashlib.sha256(open(p, "rb").read()).hexdigest()
           with open(p) as f:
@@ -90,10 +111,14 @@ jobs:
               "n_observations": len(rows),
               "first_obs": rows[0].strip('"'),
               "last_obs": rows[-1].strip('"'),
+              "source_last_modified": os.environ.get("LAST_MODIFIED", ""),
           }
           json.dump(meta, open("data/VINTAGE.json", "w"), indent=2)
           print(json.dumps(meta, indent=2))
           PY
+          # Keep the strict demo-validation goldens in sync with the new vintage.
+          pip install -r requirements.txt
+          python scripts/regen_goldens.py
 
       - name: Commit refreshed data
         if: steps.compare.outputs.changed == 'true'
@@ -101,10 +126,10 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/LONGBASE.TXT data/VINTAGE.json
-          git commit -m "data: refresh LONGBASE from Fed data-only package (sha ${{ steps.compare.outputs.new_sha }})"
+          git add data/LONGBASE.TXT data/VINTAGE.json tests/golden_example1.json
+          git commit -m "data: refresh LONGBASE to current Fed vintage + re-baseline validation goldens"
           git push
 
       - name: Report no-op
-        if: steps.compare.outputs.changed == 'false'
-        run: echo "LONGBASE.TXT is unchanged — nothing to commit."
+        if: steps.head.outputs.proceed == 'false' || steps.compare.outputs.changed == 'false'
+        run: echo "No newer LONGBASE published — nothing to commit."

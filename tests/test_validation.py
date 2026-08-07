@@ -13,24 +13,31 @@ with real GDP falling a few tenths of a percent).
 
 from __future__ import annotations
 
+import json
+import pathlib
+
 import pandas as pd
 import pytest
 
-# Golden deviations for the first 8 quarters (see module docstring). These are
-# vintage-specific — captured from the LONGBASE recorded in data/VINTAGE.json.
-# When the data-refresh workflow updates LONGBASE, regenerate these (run the
-# example1 recipe below) and update both these values and VINTAGE.json.
-GOLDEN_RFF_BP = [100.0107, 82.5306, 66.1999, 50.273, 36.0264, 23.3095, 12.3605, 3.0577]
-GOLDEN_XGDP_PCT = [
-    0.00082,
-    -0.1622,
-    -0.25559,
-    -0.3883,
-    -0.4313,
-    -0.47154,
-    -0.48467,
-    -0.48973,
-]
+# Golden deviations for the first 8 quarters are vintage-specific and live in
+# tests/golden_example1.json, which scripts/regen_goldens.py rewrites whenever
+# the data-refresh workflow updates LONGBASE. That keeps this strict check in
+# sync with the committed data automatically. Embedded values are a fallback if
+# the JSON is ever missing.
+_GOLDEN_JSON = pathlib.Path(__file__).with_name("golden_example1.json")
+_FALLBACK_RFF_BP = [100.0107, 82.5306, 66.1999, 50.273, 36.0264, 23.3095, 12.3605, 3.0577]
+_FALLBACK_XGDP_PCT = [0.00082, -0.1622, -0.25559, -0.3883, -0.4313, -0.47154, -0.48467, -0.48973]
+
+
+def _load_golden():
+    try:
+        data = json.loads(_GOLDEN_JSON.read_text())
+        return data["rff_bp"], data["xgdp_pct"]
+    except (OSError, ValueError, KeyError):
+        return _FALLBACK_RFF_BP, _FALLBACK_XGDP_PCT
+
+
+GOLDEN_RFF_BP, GOLDEN_XGDP_PCT = _load_golden()
 
 
 def _run_example1(var_model, baseline):

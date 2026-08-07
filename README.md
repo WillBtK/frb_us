@@ -132,10 +132,23 @@ saved rather than recomputed.
 ## Data refresh
 
 `.github/workflows/refresh-data.yml` checks the Fed's *data-only* package weekly
-(and on demand), and when `LONGBASE.TXT` has changed it re-downloads it, updates
-`data/VINTAGE.json`, and commits the refreshed data. The **model/equations**
-package is deliberately **not** on this cadence — bumping it changes the model's
-behaviour and is a manual, reviewed step.
+(and on demand). It's designed to be **light and unattended**:
+
+- A `HEAD` request compares the package's `Last-Modified` against the one last
+  ingested (`source_last_modified` in `data/VINTAGE.json`); on a quiet week that
+  single request is the whole job — no download.
+- When the package is newer it downloads, and commits only if `LONGBASE.TXT`'s
+  content hash actually changed.
+- On a real change it also **re-baselines the strict validation goldens**
+  (`scripts/regen_goldens.py` → `tests/golden_example1.json`) in the same run,
+  so an automatic data update never leaves CI stale. `tests/test_validation.py`
+  reads those goldens.
+
+The **model/equations** package is deliberately **not** on this cadence —
+bumping it changes the model's behaviour and is a manual, reviewed step (after
+which, run `python scripts/regen_goldens.py` and commit the result).
+
+To force a check now: **Actions → Refresh LONGBASE data → Run workflow**.
 
 ## Use cases and scope
 
