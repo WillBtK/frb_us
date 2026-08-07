@@ -164,7 +164,12 @@ def _summary_from_out(out, horizons):
     return pd.DataFrame(rows)
 
 
-st.sidebar.title("Shock configuration")
+st.title("📈 FRB/US Shock Analysis")
+st.caption(
+    "Compare how a macroeconomic shock plays out **with** an active monetary-"
+    "policy rule vs. **without** a monetary response (the federal funds rate held "
+    "at baseline)."
+)
 
 # Shock options ordered by group, plus an advanced raw-variable escape hatch.
 _SHOCK_GROUP_ORDER = ["Demand", "Prices & supply", "Financial", "Fiscal & monetary"]
@@ -180,67 +185,7 @@ def _shock_option_label(k):
     return f"{s.group} · {s.label}"
 
 
-n_shocks = st.sidebar.slider(
-    "Number of shocks", 1, 3, 1,
-    help="Apply several shocks at once — e.g. an oil-price spike together with a "
-    "fiscal expansion. Their effects combine in the same run.",
-)
-
-shock_specs = []  # (kind, name, magnitude, duration)
-for i in range(n_shocks):
-    if n_shocks > 1:
-        st.sidebar.markdown(f"**Shock {i + 1}**")
-    key = st.sidebar.selectbox(
-        "Type",
-        options=_SHOCK_OPTIONS,
-        index=min(i, len(_SHOCK_OPTIONS) - 2),
-        format_func=_shock_option_label,
-        key=f"shk_type_{i}",
-    )
-    if key == "__custom__":
-        name = st.sidebar.text_input(
-            "FRB/US variable (endogenous name)", value="eco", key=f"shk_var_{i}",
-            help="Shocks <variable>_aerr in native model units — for power users.",
-        )
-        dmag, ddur, unit, kind = 0.01, 4, "model units (native)", "custom"
-        st.sidebar.caption("Native add-factor units — see docs.")
-    else:
-        spec = CATALOGUE[key]
-        st.sidebar.caption(f"{spec.description} _{spec.sign_note}_")
-        dmag, ddur, unit, kind = spec.default_magnitude, spec.default_duration, spec.user_unit, "catalogue"
-        name = key
-    mag = st.sidebar.number_input(
-        f"Magnitude ({unit})", value=float(dmag),
-        step=abs(float(dmag)) / 4 or 0.1, key=f"shk_mag_{i}",
-    )
-    dur = st.sidebar.slider(
-        "Duration (quarters on)", 1, 20, int(ddur), key=f"shk_dur_{i}"
-    )
-    shock_specs.append((kind, name, float(mag), int(dur)))
-    if n_shocks > 1 and i < n_shocks - 1:
-        st.sidebar.markdown("---")
-
-st.sidebar.divider()
-
-exp_choices = expectations_choices()
-expectations = st.sidebar.radio(
-    "Expectations assumption",
-    options=list(exp_choices),
-    format_func=lambda k: exp_choices[k],
-    help="VAR = backward-looking. MCE = model-consistent / rational (slower).",
-)
-if expectations == "mce":
-    st.sidebar.warning("Model-consistent expectations solve over a long horizon and take longer.")
-
 def _start_quarter_options():
-    """Chronologically-sorted start quarters, defaulting to the current quarter.
-
-    The baseline is a fixed-vintage FRB/US projection, so "now" means the current
-    quarter *within that projection* — not data conditioned on realised recent
-    history. By ~2025 the baseline is already on its long-run path, so every
-    option here solves cleanly; "long-run" matches the Fed demos' 2040Q1
-    convention for textbook-clean impulse responses.
-    """
     today_q = pd.Period(pd.Timestamp.today(), freq="Q")
     proj_start = pd.Period("2022Q1", freq="Q")  # permissive floor for start options
     vint = data_vintage() or {}
@@ -266,84 +211,91 @@ def _fmt_start(s):
     return s
 
 
-start = st.sidebar.selectbox(
-    "Start quarter (when the shock hits)",
-    options=_START_OPTS,
-    index=_START_OPTS.index(_START_NEAR),
-    format_func=_fmt_start,
-    help="'Now' starts the shock in the current quarter. The baseline carries "
-    "historical actuals up to its jump-off (see the data range above) and a "
-    "model-guided projection beyond; 'now' typically sits just past the jump-off. "
-    "Every option solves cleanly; 'long-run' matches the Fed demos' 2040Q1 "
-    "convention for textbook-clean impulse responses.",
-)
-horizon = st.sidebar.slider(
-    "Horizon (quarters shown)", 4, 12, 12,
-    help="How many quarters to display. Capped at 12 (3 years): shocks have "
-    "largely played out by then, and further out is swamped by other events. "
-    "A shorter window also makes model-consistent (MCE) runs lighter and faster.",
-)
+_exp_choices = expectations_choices()
 
-st.sidebar.divider()
+# --- Global settings (one horizontal row of dropdowns) ---
+_g = st.columns(4)
+n_shocks = _g[0].selectbox(
+    "Number of shocks", [1, 2, 3], index=0,
+    help="Apply several shocks at once — their effects combine in one run.",
+)
+expectations = _g[1].selectbox(
+    "Expectations", list(_exp_choices), format_func=lambda k: _exp_choices[k],
+    help="VAR = backward-looking. MCE = model-consistent / rational (slower).",
+)
+start = _g[2].selectbox(
+    "Start quarter", _START_OPTS, index=_START_OPTS.index(_START_NEAR),
+    format_func=_fmt_start, help="When the shock hits, on the projection baseline.",
+)
+horizon = _g[3].selectbox(
+    "Horizon (quarters)", list(range(4, 13)), index=8,
+    help="Quarters shown, capped at 12 (3 years).",
+)
+if expectations == "mce":
+    st.caption("⏳ Model-consistent expectations solve over a longer horizon — slower.")
 
-# --- Output variable selector (grouped) ---
-st.sidebar.markdown("**Output variables**")
-_selected_outputs: list = []
-with st.sidebar.expander(
-    "Choose what to chart", expanded=False
+# --- One horizontal row per shock: type | magnitude | duration ---
+shock_specs = []  # (kind, name, magnitude, duration)
+for i in range(int(n_shocks)):
+    _c = st.columns([3, 1, 1])
+    key = _c[0].selectbox(
+        f"Shock {i + 1}" if n_shocks > 1 else "Shock",
+        options=_SHOCK_OPTIONS, index=min(i, len(_SHOCK_OPTIONS) - 2),
+        format_func=_shock_option_label, key=f"shk_type_{i}",
+    )
+    if key == "__custom__":
+        name = _c[0].text_input(
+            "FRB/US variable", value="eco", key=f"shk_var_{i}",
+            help="Shocks <variable>_aerr in native model units — for power users.",
+        )
+        dmag, ddur, unit, kind = 0.01, 4, "native units", "custom"
+    else:
+        _spec = CATALOGUE[key]
+        dmag, ddur, unit, kind = (
+            _spec.default_magnitude, _spec.default_duration, _spec.user_unit, "catalogue",
+        )
+        name = key
+    mag = _c[1].number_input(
+        f"Magnitude ({unit})", value=float(dmag),
+        step=abs(float(dmag)) / 4 or 0.1, key=f"shk_mag_{i}",
+    )
+    dur = _c[2].number_input(
+        "Duration (q)", min_value=1, max_value=20, value=int(ddur), step=1, key=f"shk_dur_{i}",
+    )
+    shock_specs.append((kind, name, float(mag), int(dur)))
+    if key != "__custom__":
+        st.caption(f"↳ {CATALOGUE[key].description}")
+
+# --- Output variables (collapsed; grouped multiselects, 3 per row) ---
+with st.expander(
+    "Output variables — default: GDP growth, unemployment, PCE inflation, funds rate"
 ):
     st.caption(
         "Rates & inflation show percentage-point deviations; levels (GDP, "
-        "consumption, investment) show percent deviations from baseline."
+        "consumption, investment, …) show percent deviations from baseline."
     )
-    for _group in OUTPUT_GROUPS:
-        _group_vars = [v for v in OUTPUT_CATALOGUE if v.group == _group]
-        _defaults = [v.key for v in _group_vars if v.key in DEFAULT_OUTPUTS]
-        _picked = st.multiselect(
-            _group,
-            options=[v.key for v in _group_vars],
-            default=_defaults,
-            format_func=lambda k: f"{OUTPUT_BY_KEY[k].label} ({OUTPUT_BY_KEY[k].unit})",
-            key=f"outsel_{_group}",
-        )
-        _selected_outputs.extend(_picked)
+    _selected_outputs: list = []
+    _groups = list(OUTPUT_GROUPS)
+    for _row_start in range(0, len(_groups), 3):
+        _row = st.columns(3)
+        for _k, _group in enumerate(_groups[_row_start:_row_start + 3]):
+            _group_vars = [v for v in OUTPUT_CATALOGUE if v.group == _group]
+            _defaults = [v.key for v in _group_vars if v.key in DEFAULT_OUTPUTS]
+            _picked = _row[_k].multiselect(
+                _group, options=[v.key for v in _group_vars], default=_defaults,
+                format_func=lambda k: f"{OUTPUT_BY_KEY[k].label} ({OUTPUT_BY_KEY[k].unit})",
+                key=f"outsel_{_group}",
+            )
+            _selected_outputs.extend(_picked)
 
-# Preserve catalogue order; fall back to the four defaults if nothing is picked.
 selected_outputs = [v.key for v in OUTPUT_CATALOGUE if v.key in _selected_outputs]
 if not selected_outputs:
     selected_outputs = list(DEFAULT_OUTPUTS)
-st.sidebar.caption(f"{len(selected_outputs)} variable(s) selected")
 
-run_clicked = st.sidebar.button("▶ Run simulation", type="primary", use_container_width=True)
+run_clicked = st.button("▶ Run simulation", type="primary")
 
 
-# --------------------------------------------------------------------------- #
-# Main panel                                                                  #
-# --------------------------------------------------------------------------- #
-st.title("📈 FRB/US Shock Analysis")
-st.markdown(
-    "Compare how a macroeconomic shock plays out **with** an active monetary-"
-    "policy rule versus **without** a monetary response (the federal funds rate "
-    "held at its baseline path). Built on the Federal Reserve's "
-    "[FRB/US model](https://www.federalreserve.gov/econres/us-models-about.htm)."
-)
-
-vintage = data_vintage() or {}
-cols = st.columns(3)
-cols[0].metric("Model vintage", MODEL_VINTAGE.split(" (")[0])
-cols[1].metric("Data range", f"{vintage.get('first_obs', '?')} – {vintage.get('last_obs', '?')}")
-cols[2].metric("Series in dataset", vintage.get("n_variables", "?"))
-
-st.info(
-    "**Caveat:** the baseline projection in the Fed's dataset follows the FOMC's "
-    "Summary of Economic Projections where available and a model-guided "
-    "extrapolation beyond it. That extrapolation **is not a forecast** — treat "
-    "results as *deviations from a stylised baseline*, not predictions. The "
-    "dataset carries historical actuals up to its jump-off and a projection "
-    "beyond (see the data range above); it is refreshed from the Fed by CI, but "
-    "the projection past the jump-off is still not a forecast.",
-    icon="⚠️",
-)
+st.divider()
 
 if run_clicked:
     with st.spinner("Running FRB/US — solving baseline, active rule, and held-rate scenarios…"):
@@ -369,7 +321,7 @@ out = st.session_state.get("run")
 
 if out is None:
     st.markdown(
-        "👈 Configure a shock in the sidebar and press **Run simulation**. "
+        "Configure a shock above and press **Run simulation**. "
         "Each run solves the FRB/US model fresh, so expect a few seconds "
         "(longer under model-consistent expectations)."
     )
@@ -462,3 +414,17 @@ else:
             "Funds-rate hold mechanism: dmpex=1, dmpintay=0, rfffix=baseline rff, "
             "rff_trac=rffrule_trac=0 (the model's exogenous-rate switch)."
         )
+
+
+# --------------------------------------------------------------------------- #
+# Footnote — model/data vintage + the not-a-forecast caveat                   #
+# --------------------------------------------------------------------------- #
+st.divider()
+_vintage = data_vintage() or {}
+st.caption(
+    f"Model {MODEL_VINTAGE.split(' (')[0]} · data {_vintage.get('first_obs', '?')}–"
+    f"{_vintage.get('last_obs', '?')} ({_vintage.get('n_variables', '?')} series). "
+    "The baseline follows the FOMC's Summary of Economic Projections where "
+    "available and a model-guided extrapolation beyond — **not a forecast**; "
+    "results are deviations from a stylised baseline."
+)

@@ -52,72 +52,52 @@ def _cached_ocp(shocks_spec, weights, expectations, start, horizon):
 # --------------------------------------------------------------------------- #
 # Sidebar                                                                     #
 # --------------------------------------------------------------------------- #
-st.sidebar.title("Optimal control")
+st.title("🎯 Optimal-Control Monetary Policy")
+st.caption(
+    "The funds-rate path that minimises a quadratic loss over the inflation and "
+    "unemployment gaps (plus rate smoothing), vs. the Taylor rule and no "
+    "response — linear-quadratic method, in the spirit of the FEDS Note."
+)
 
 _DEMAND = [k for k, s in CATALOGUE.items() if s.group in ("Demand", "Prices & supply")]
-shock_key = st.sidebar.selectbox(
-    "Shock to stabilise",
-    options=_DEMAND,
+
+# --- Row 1: the shock to stabilise ---
+_r1 = st.columns([2, 1, 1])
+shock_key = _r1[0].selectbox(
+    "Shock to stabilise", options=_DEMAND,
     index=_DEMAND.index("consumption") if "consumption" in _DEMAND else 0,
     format_func=lambda k: CATALOGUE[k].label,
-    help="The disturbance the policymaker faces. Optimal control finds the "
-    "funds-rate path that best offsets its effect on inflation and unemployment.",
+    help="The disturbance the policymaker faces.",
 )
 spec = CATALOGUE[shock_key]
 default_sign = -1.0 if shock_key in ("consumption", "durables", "housing", "business_investment") else 1.0
-st.sidebar.caption(spec.description)
-magnitude = st.sidebar.number_input(
-    f"Magnitude ({spec.user_unit})",
-    value=float(spec.default_magnitude) * default_sign,
+magnitude = _r1[1].number_input(
+    f"Magnitude ({spec.user_unit})", value=float(spec.default_magnitude) * default_sign,
     step=abs(float(spec.default_magnitude)) / 4 or 0.1,
     help="Negative demand shocks create a recession (the classic OCP case).",
 )
-duration = st.sidebar.slider("Duration (quarters on)", 1, 12, int(spec.default_duration))
+duration = _r1[2].number_input(
+    "Duration (q)", min_value=1, max_value=12, value=int(spec.default_duration), step=1,
+)
 
-st.sidebar.divider()
-st.sidebar.markdown("**Loss weights**")
-w_pi = st.sidebar.slider("Inflation gap", 0.0, 3.0, 1.0, 0.1)
-w_u = st.sidebar.slider("Unemployment gap", 0.0, 3.0, 1.0, 0.1)
-w_sm = st.sidebar.slider("Rate smoothing", 0.0, 2.0, 0.5, 0.1,
-                         help="Penalty on quarter-to-quarter funds-rate changes.")
-
-expectations = st.sidebar.radio(
+# --- Row 2: loss weights + settings ---
+_r2 = st.columns(5)
+w_pi = _r2[0].slider("Inflation weight", 0.0, 3.0, 1.0, 0.1)
+w_u = _r2[1].slider("Unemployment weight", 0.0, 3.0, 1.0, 0.1)
+w_sm = _r2[2].slider("Rate smoothing", 0.0, 2.0, 0.5, 0.1,
+                     help="Penalty on quarter-to-quarter funds-rate changes.")
+expectations = _r2[3].selectbox(
     "Expectations", options=["var", "mce"],
     format_func=lambda k: {"var": "VAR (fast)", "mce": "Model-consistent (slow)"}[k],
 )
+horizon = _r2[4].selectbox("Horizon (q)", [8, 9, 10, 11, 12], index=4)
 if expectations == "mce":
-    st.sidebar.warning(
-        "MCE optimal control builds the full anticipation matrix — one solve per "
-        "quarter — so it can take a couple of minutes."
-    )
-horizon = st.sidebar.slider("Horizon (quarters)", 8, 12, 12)
+    st.caption("⏳ MCE builds the full anticipation matrix — one solve per quarter, a couple of minutes.")
+st.caption(f"↳ {spec.description}")
 
-run = st.sidebar.button("▶ Optimise policy", type="primary", use_container_width=True)
+run = st.button("▶ Optimise policy", type="primary")
+st.divider()
 
-
-# --------------------------------------------------------------------------- #
-# Main                                                                        #
-# --------------------------------------------------------------------------- #
-st.title("🎯 Optimal-Control Monetary Policy")
-st.markdown(
-    "The policymaker chooses the **funds-rate path that minimises a quadratic "
-    "loss** over the inflation and unemployment deviations from baseline (plus a "
-    "rate-smoothing penalty), and we compare it to the **Taylor rule** and to "
-    "**no monetary response**:"
-)
-st.latex(r"L=w_\pi\sum_t \pi^{\,dev\,2}_t + w_u\sum_t u^{\,dev\,2}_t + w_{\text{sm}}\sum_t(\Delta i_t)^2")
-st.caption(
-    "Solved by the linear-quadratic method (the model's impulse responses give a "
-    "linear map from the funds-rate path to outcomes, so the optimum is "
-    "closed-form). A linear approximation — its error vs. a full nonlinear solve "
-    "is reported below. In the spirit of the FEDS Note on optimal-control policy."
-)
-
-vintage = data_vintage() or {}
-st.caption(
-    f"Model PyFRB/US 1.0.0 · data {vintage.get('first_obs','?')}–{vintage.get('last_obs','?')}. "
-    "Deviations from a stylised baseline, not a forecast."
-)
 
 if run:
     with st.spinner("Building impulse responses and optimising the funds-rate path…"):
@@ -134,7 +114,7 @@ if run:
 
 out = st.session_state.get("ocp")
 if out is None:
-    st.info("👈 Pick a shock and loss weights, then press **Optimise policy**.")
+    st.info("Pick a shock and loss weights above, then press **Optimise policy**.")
     st.stop()
 
 paths = out["paths"]
@@ -195,3 +175,13 @@ with st.expander("Method & caveats"):
         "shock). Raising the unemployment weight makes policy lean harder against "
         "unemployment; raising smoothing makes the rate path gentler."
     )
+
+# --- Footnote — loss + vintage ---
+st.divider()
+_vintage = data_vintage() or {}
+st.caption(
+    "Loss L = w_π·Σπ² + w_u·Σu² + w_sm·Σ(Δi)² in deviations from baseline. "
+    f"Model PyFRB/US 1.0.0 · data {_vintage.get('first_obs', '?')}–"
+    f"{_vintage.get('last_obs', '?')}. Deviations from a stylised baseline — not a "
+    "forecast; the optimum is a linear approximation (error shown above)."
+)

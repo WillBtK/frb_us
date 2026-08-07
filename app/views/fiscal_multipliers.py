@@ -41,62 +41,34 @@ def _cached_table(instrument_keys, expectations, start):
 # --------------------------------------------------------------------------- #
 # Sidebar                                                                     #
 # --------------------------------------------------------------------------- #
-st.sidebar.title("Fiscal multipliers")
+st.title("💵 Fiscal Multipliers")
+st.caption(
+    "Output multipliers — cumulative ΔGDP per $ of fiscal impulse — by instrument "
+    "and monetary response, in the spirit of CBO's fiscal-multiplier analysis."
+)
 
-inst_keys = st.sidebar.multiselect(
-    "Instruments",
-    options=list(INSTRUMENTS),
-    default=list(INSTRUMENTS),
+_today_q = str(pd.Period(pd.Timestamp.today(), freq="Q"))
+_c = st.columns([2, 1, 1])
+inst_keys = _c[0].multiselect(
+    "Instruments", options=list(INSTRUMENTS), default=list(INSTRUMENTS),
     format_func=lambda k: INSTRUMENTS[k].label,
     help="Each is shocked by a moderate impulse; the multiplier is ΔGDP per $ of "
     "that impulse, so its size barely matters.",
 )
-for _k in inst_keys:
-    st.sidebar.caption(f"↳ {INSTRUMENTS[_k].label}: {INSTRUMENTS[_k].note}")
-
-expectations = st.sidebar.radio(
-    "Expectations",
-    options=["var", "mce"],
+expectations = _c[1].selectbox(
+    "Expectations", options=["var", "mce"],
     format_func=lambda k: {"var": "VAR (fast)", "mce": "Model-consistent (slower)"}[k],
 )
+start = _c[2].selectbox(
+    "Start quarter", options=[_today_q, "2035Q1", "2040Q1"],
+    help="When the fiscal impulse begins, on the projection baseline.",
+)
 if expectations == "mce":
-    st.sidebar.warning(
-        "MCE solves every instrument twice under the forward-looking solver — "
-        "expect this to take a while for several instruments."
-    )
+    st.caption("⏳ MCE solves every instrument twice under the forward-looking solver — slower.")
 
-_today_q = str(pd.Period(pd.Timestamp.today(), freq="Q"))
-start = st.sidebar.selectbox(
-    "Start quarter",
-    options=[_today_q, "2035Q1", "2040Q1"],
-    help="When the fiscal impulse begins, on the model's projection baseline.",
-)
+run = st.button("▶ Compute multipliers", type="primary")
+st.divider()
 
-run = st.sidebar.button("▶ Compute multipliers", type="primary", use_container_width=True)
-
-
-# --------------------------------------------------------------------------- #
-# Main                                                                        #
-# --------------------------------------------------------------------------- #
-st.title("💵 Fiscal Multipliers")
-st.markdown(
-    "The **output multiplier** at a horizon is the *cumulative* change in real "
-    "GDP per dollar of fiscal impulse (both in real 2012\\$):"
-)
-st.latex(r"\text{multiplier}(h)=\frac{\sum_{t=0}^{h}\Delta \text{GDP}_t}{\sum_{t=0}^{h}\Delta \text{impulse}_t}")
-st.markdown(
-    "Multipliers differ by instrument — **purchases > transfers > tax cuts** — "
-    "and are **larger when monetary policy accommodates** (the funds rate held at "
-    "baseline) than when the active rule leans against the stimulus. "
-    "In the spirit of CBO's fiscal-multiplier analysis."
-)
-
-vintage = data_vintage() or {}
-st.caption(
-    f"Model: PyFRB/US 1.0.0 · Data range {vintage.get('first_obs','?')}–"
-    f"{vintage.get('last_obs','?')}. Results are deviations from a stylised "
-    "projection baseline (not a forecast)."
-)
 
 if run:
     if not inst_keys:
@@ -113,7 +85,7 @@ if run:
 
 tbl = st.session_state.get("mult_tbl")
 if tbl is None:
-    st.info("👈 Choose instruments and press **Compute multipliers**.")
+    st.info("Choose instruments above and press **Compute multipliers**.")
     st.stop()
 
 meta = st.session_state.get("mult_meta", {})
@@ -166,3 +138,13 @@ with st.expander("How to read this"):
         "(quarter-0) multiplier is the same with or without a monetary response, "
         "since policy reacts with a lag."
     )
+
+# --- Footnote — definition + vintage ---
+st.divider()
+_vintage = data_vintage() or {}
+st.caption(
+    "multiplier(h) = Σ ΔGDP ÷ Σ Δimpulse through horizon h (real 2012$). "
+    f"Model PyFRB/US 1.0.0 · data {_vintage.get('first_obs', '?')}–"
+    f"{_vintage.get('last_obs', '?')}. Deviations from a stylised projection "
+    "baseline — not a forecast."
+)
