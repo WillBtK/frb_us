@@ -236,12 +236,12 @@ def _start_quarter_options():
     convention for textbook-clean impulse responses.
     """
     today_q = pd.Period(pd.Timestamp.today(), freq="Q")
-    proj_start = pd.Period("2022Q1", freq="Q")  # ~ baseline jump-off (data vintage)
+    proj_start = pd.Period("2022Q1", freq="Q")  # permissive floor for start options
     vint = data_vintage() or {}
     try:
-        last_obs = pd.Period(vint.get("last_obs", "2172Q1"), freq="Q")
+        last_obs = pd.Period(vint.get("last_obs", "2176Q1"), freq="Q")
     except Exception:  # noqa: BLE001
-        last_obs = pd.Period("2172Q1", freq="Q")
+        last_obs = pd.Period("2176Q1", freq="Q")
     near = min(max(today_q, proj_start), last_obs - 40)  # leave room for the horizon
     longrun = pd.Period("2040Q1", freq="Q")
     cands = [near, near + 4, near + 8, near + 20, longrun]
@@ -265,11 +265,11 @@ start = st.sidebar.selectbox(
     options=_START_OPTS,
     index=_START_OPTS.index(_START_NEAR),
     format_func=_fmt_start,
-    help="The bundled baseline is a fixed ~2022-vintage FRB/US projection, so "
-    "'now' is the current quarter within that projection — not data updated with "
-    "realised recent history. By ~2025 the baseline sits on its long-run path, so "
-    "all choices give clean deviation paths; 'long-run' matches the Fed demos' "
-    "2040Q1 convention.",
+    help="'Now' starts the shock in the current quarter. The baseline carries "
+    "historical actuals up to its jump-off (see the data range above) and a "
+    "model-guided projection beyond; 'now' typically sits just past the jump-off. "
+    "Every option solves cleanly; 'long-run' matches the Fed demos' 2040Q1 "
+    "convention for textbook-clean impulse responses.",
 )
 horizon = st.sidebar.slider("Horizon (quarters shown)", 8, 40, 20)
 
@@ -328,9 +328,9 @@ st.info(
     "Summary of Economic Projections where available and a model-guided "
     "extrapolation beyond it. That extrapolation **is not a forecast** — treat "
     "results as *deviations from a stylised baseline*, not predictions. The "
-    "bundled dataset is a fixed vintage (see the data range above; refreshed "
-    "periodically by CI), so a *now* start reflects that vintage's projection of "
-    "the present, not data updated with realised recent history.",
+    "dataset carries historical actuals up to its jump-off and a projection "
+    "beyond (see the data range above); it is refreshed from the Fed by CI, but "
+    "the projection past the jump-off is still not a forecast.",
     icon="⚠️",
 )
 

@@ -16,17 +16,20 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-# Golden deviations for the first 8 quarters (see module docstring).
-GOLDEN_RFF_BP = [100.0113, 82.6314, 66.4751, 50.8255, 36.842, 24.3446, 13.5329, 4.288]
+# Golden deviations for the first 8 quarters (see module docstring). These are
+# vintage-specific — captured from the LONGBASE recorded in data/VINTAGE.json.
+# When the data-refresh workflow updates LONGBASE, regenerate these (run the
+# example1 recipe below) and update both these values and VINTAGE.json.
+GOLDEN_RFF_BP = [100.0107, 82.5306, 66.1999, 50.273, 36.0264, 23.3095, 12.3605, 3.0577]
 GOLDEN_XGDP_PCT = [
-    0.00079,
-    -0.15566,
-    -0.24333,
-    -0.36776,
-    -0.40956,
-    -0.45105,
-    -0.46869,
-    -0.47916,
+    0.00082,
+    -0.1622,
+    -0.25559,
+    -0.3883,
+    -0.4313,
+    -0.47154,
+    -0.48467,
+    -0.48973,
 ]
 
 

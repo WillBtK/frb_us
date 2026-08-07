@@ -42,6 +42,16 @@ The **model** equations change rarely and are bumped manually (they change the
 model's behaviour). The **data** updates more often and is refreshed
 automatically — see [Data refresh](#data-refresh).
 
+> **Note — deliberate model/data vintage split.** The vendored model is the
+> 2022-era PyFRB/US 1.0.0; the data is refreshed to the current Fed vintage
+> (historical actuals now run through the recent past, then a projection). The
+> current data drops three variables the 2022 model still names
+> (`dmpgen`/`rffgen`, the generalized policy rule, and `pcstar`) — none are used
+> by this app's scenarios, and the package solves cleanly against the newer data
+> (the demo-validation test is re-baselined to the committed vintage and runs in
+> CI). If you later vendor a newer `model.xml`, re-generate the golden values in
+> `tests/test_validation.py`.
+
 ### ⚠️ The baseline is not a forecast
 
 Simulations run off the projection baseline embedded in the Fed's dataset. Per
