@@ -38,6 +38,14 @@ from .outputs import (
     summary_table,
     to_csv_bytes,
 )
+from .multipliers import (
+    INSTRUMENTS,
+    FiscalInstrument,
+    MultiplierResult,
+    get_instrument,
+    multiplier_table,
+    run_multiplier,
+)
 from .shocks import CATALOGUE, ShockSpec, custom_shock, get_shock
 from .simulate import (
     DEFAULT_HORIZON,
@@ -57,6 +65,12 @@ __all__ = [
     "ShockRequest",
     "get_shock",
     "custom_shock",
+    "multiplier_table",
+    "run_multiplier",
+    "get_instrument",
+    "INSTRUMENTS",
+    "FiscalInstrument",
+    "MultiplierResult",
     "deviations",
     "deviation_panel",
     "levels_panel",

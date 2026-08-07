@@ -35,6 +35,10 @@ baseline) side by side.
   percentage points, levels as percent deviations from baseline.
 - **Export:** download any run as CSV (deviation panel) or PNG/HTML chart, since
   each run is computationally non-trivial.
+- **Fiscal Multipliers page** (a second tab): output multipliers (ΔGDP per $ of
+  fiscal impulse) for federal & state/local purchases, transfers, and a personal
+  tax cut, with the active rule vs. an accommodative (funds-rate-held) response —
+  in the spirit of CBO's fiscal-multiplier work.
 
 ## Vintages
 
