@@ -58,7 +58,8 @@ def stochsim(
     )
 
     # Break index_mat into a list of columns
-    index_mat_list = [col for (_, col) in index_mat.iteritems()]
+    # Patched: DataFrame.iteritems() was removed in pandas 2.0; use .items().
+    index_mat_list = [col for (_, col) in index_mat.items()]
 
     # Run stochastic simulation
     solutions: List[Union[DataFrame, str]] = []

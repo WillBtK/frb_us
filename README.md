@@ -75,6 +75,12 @@ baseline) side by side.
   one (debt/GDP drifts up) is the debt-sustainability question. VAR-only.
   (Sovereign risk is not endogenous — add the term-premium lever to represent a
   market repricing of debt.)
+- **Debt Fan Charts page** (a fifth tab): the **distribution** of debt/GDP paths
+  under macroeconomic uncertainty, from FRB/US's **stochastic simulation** (a
+  block-bootstrap of the model's 52 estimated equation residuals over 1975Q1–
+  2019Q4) — the IMF/CBO debt-sustainability fan chart, with 50%/80% probability
+  bands, a median, and a P(debt/GDP rising) read-out. Runs live (each draw is a
+  full solve, so a run takes ~1–2 minutes; results are cached).
 
 ## Vintages
 
@@ -126,12 +132,13 @@ switches rather than a hack (full detail in `src/frbus_shock/policy.py`):
 
 ```
 app/streamlit_app.py         Streamlit entry point — navigation router (deploy this)
-app/views/                   The four tabs (via st.navigation)
+app/views/                   The five tabs (via st.navigation)
   ├─ shock_analysis.py       Shock Analysis
   ├─ fiscal_multipliers.py   Fiscal Multipliers
   ├─ optimal_control.py      Optimal Control
   ├─ debt_sustainability.py  Debt Sustainability
-  └─ _shock_controls.py      Shared multi-shock UI (loader + rows), used by three tabs
+  ├─ debt_fan_charts.py      Debt Fan Charts (stochastic)
+  └─ _shock_controls.py      Shared multi-shock UI (loader + rows), used by four tabs
 src/frbus_shock/             Simulation library wrapping PyFRB/US
   ├─ shocks.py               Shock library (levers, units, defaults, groups)
   ├─ policy.py               Monetary rules + fiscal closure rules + funds-rate hold
@@ -140,7 +147,8 @@ src/frbus_shock/             Simulation library wrapping PyFRB/US
   ├─ outputs.py              Deviation panels, summary table, CSV/chart export
   ├─ multipliers.py          Fiscal output multipliers
   ├─ optcontrol.py           Linear-quadratic optimal control
-  └─ debt.py                 Debt-sustainability: shock under each fiscal closure rule
+  ├─ debt.py                 Debt-sustainability: shock under each fiscal closure rule
+  └─ stoch.py                Stochastic debt fan charts (block-bootstrap of residuals)
 third_party/pyfrbus/         Vendored, patched PyFRB/US (public domain)
   ├─ pyfrbus/                Model platform code (3 compat patches)
   ├─ models/model.xml        FRB/US equations

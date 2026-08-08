@@ -63,6 +63,7 @@ from .debt import (
     run_debt_comparison,
 )
 from .policy import ACTIVE_RULES, DEFAULT_FISCAL_RULE, DEFAULT_RULE, FISCAL_RULES
+from .stoch import PERCENTILES, FanResult, debt_fan_chart
 from .shocks import (
     CATALOGUE,
     SCENARIO_PRESETS,
@@ -95,6 +96,9 @@ __all__ = [
     "DEBT_OUTPUT_KEYS",
     "DEBT_LABELS",
     "DEBT_UNITS",
+    "debt_fan_chart",
+    "FanResult",
+    "PERCENTILES",
     "ShockSpec",
     "ShockRequest",
     "get_shock",

@@ -34,7 +34,7 @@ rule vs. exogenous funds rate).
 | **`example2.py`** | The same shock under **model-consistent expectations** (`mce="mcap+wp"`), with `rstar` endogenous in the long run (`drstar`). | **Supported** — the MCE expectations toggle. |
 | **`example3.py`** | **Threshold-based forward guidance**: switches to a non-inertial Taylor rule (`dmptay`), enables thresholds (`dmptrsh`) on unemployment (`lurtrsh`) and inflation (`pitrsh`), and rolls historical residuals forward. | **Beyond first pass** (see below) — thresholds/state-contingent guidance. |
 | **`example4.py`** | **Trajectory matching with `mcontrol`**: forces `xgdp`, `lur`, `picxfe`, `rff`, `rg10` onto a specified path (e.g. an SPF-based scenario) by freely moving instrument add factors. | **Beyond first pass** — scenario/nowcast matching. |
-| **`stochsim.py`** | **Stochastic simulation**: draws sequences of historical residuals to build fan charts / distributions of outcomes (`frbus.stochsim`). | **Beyond first pass** — uncertainty bands. |
+| **`stochsim.py`** | **Stochastic simulation**: draws sequences of historical residuals to build fan charts / distributions of outcomes (`frbus.stochsim`). | **Implemented** — the **Debt Fan Charts** tab (`stoch.py`) uses it for debt/GDP probability bands. |
 
 The dashboard's "funds rate held at baseline" case uses the model's own
 **`dmpex`** (exogenous funds rate) switch — the same monetary-policy switch
