@@ -52,12 +52,17 @@ baseline) side by side.
   in the spirit of CBO's fiscal-multiplier work.
 - **Optimal-Control page** (a third tab): the funds-rate path that minimises a
   quadratic loss over the inflation and unemployment gaps (with adjustable
-  weights), vs. the Taylor rule and no response — solved by the linear-quadratic
-  method, in the spirit of the FEDS Note on optimal-control policy. It takes the
-  **same multi-shock disturbances and named scenarios** as the Shock Analysis tab
-  (minus the funds-rate-rule shock, which is the control variable here). The
-  optimisation is always linear-quadratic; the impulse responses default to the
-  fast **VAR** solve, with model-consistent (MCE) anticipation as a slower opt-in.
+  weights) — always shown, and benchmarked against **any two policy rules you
+  pick** from the Fed's Monetary Policy Report set: no response, the inertial
+  rule, the balanced-approach rule, the Taylor rule (with an **adjustable
+  output-gap coefficient**), and the first-difference rule. Solved by the
+  linear-quadratic method, in the spirit of the FEDS Note. The comparator rules
+  are evaluated in the same linearised model (each a linear feedback on the
+  inflation and output-gap deviations, reproducing FRB/US's own switch-based
+  rules to within a few hundredths of a pp). It takes the **same multi-shock
+  disturbances and named scenarios** as the Shock Analysis tab (minus the
+  funds-rate-rule shock, which is the control variable here). VAR is the fast
+  default; model-consistent (MCE) anticipation is a slower opt-in.
 
 ## Vintages
 

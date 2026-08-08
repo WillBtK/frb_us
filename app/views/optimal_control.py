@@ -29,15 +29,15 @@ import streamlit as st  # noqa: E402
 from plotly.subplots import make_subplots  # noqa: E402
 
 import _shock_controls as sc  # noqa: E402
-from frbus_shock import data_vintage, run_optimal_control  # noqa: E402
+from frbus_shock import RULE_LABELS, data_vintage, run_optimal_control  # noqa: E402
 
-_OPT = "#1f7a3d"      # green — optimal
-_TAY = "#1f4e79"      # blue — Taylor
-_HELD = "#c1440e"     # rust — no response
+_OPT = "#1f7a3d"  # green — always the optimal path
+# Colours cycled through the (up to two) comparator rules.
+_CMP_COLORS = ["#1f4e79", "#c1440e"]  # blue, rust
 
 
 @st.cache_data(show_spinner=False, ttl=3600, max_entries=32)
-def _cached_ocp(shocks_spec, weights, expectations, start, horizon):
+def _cached_ocp(shocks_spec, weights, expectations, start, horizon, comparators, taylor_coef):
     shocks = []
     for kind, name, mag, dur in shocks_spec:
         if kind == "custom":
@@ -46,7 +46,7 @@ def _cached_ocp(shocks_spec, weights, expectations, start, horizon):
             shocks.append({"key": name, "magnitude": mag, "duration": dur})
     res = run_optimal_control(
         shocks=shocks, weights=dict(weights), expectations=expectations,
-        start=start, horizon=horizon,
+        start=start, horizon=horizon, comparators=list(comparators), taylor_coef=taylor_coef,
     )
     return {
         "paths": res.paths,
@@ -55,6 +55,8 @@ def _cached_ocp(shocks_spec, weights, expectations, start, horizon):
         "approx_error": res.approx_error,
         "window": [str(q) for q in res.window],
         "weights": dict(res.weights),
+        "comparators": list(res.comparators),
+        "taylor_coef": res.taylor_coef,
     }
 
 
@@ -64,8 +66,9 @@ def _cached_ocp(shocks_spec, weights, expectations, start, horizon):
 st.title("🎯 Optimal-Control Monetary Policy")
 st.caption(
     "The funds-rate path that minimises a quadratic loss over the inflation and "
-    "unemployment gaps (plus rate smoothing), vs. the Taylor rule and no "
-    "response — linear-quadratic method, in the spirit of the FEDS Note."
+    "unemployment gaps (plus rate smoothing) — always shown, and compared against "
+    "any **two** policy rules you choose (including no response) — by the "
+    "linear-quadratic method, in the spirit of the FEDS Note."
 )
 
 # Shocks to stabilise: the full multi-instrument set shared with the Shock
@@ -131,6 +134,32 @@ w_u = _r3[1].slider("Unemployment-gap weight", 0.0, 3.0, step=0.1, key="ocp_wu")
 w_sm = _r3[2].slider("Rate-smoothing weight", 0.0, 2.0, step=0.1, key="ocp_wsm",
                      help="Penalty on quarter-to-quarter funds-rate changes.")
 
+# --- Comparators: the optimum is always shown; pick any two rules to compare ---
+_rule_keys = list(RULE_LABELS)  # held, inertial, balanced_approach, taylor, first_difference
+_cc = st.columns([2, 2, 1])
+cmp1 = _cc[0].selectbox(
+    "Compare against ①", _rule_keys, index=_rule_keys.index("inertial"),
+    format_func=lambda k: RULE_LABELS[k], key="ocp_cmp1",
+    help="The optimal path is always plotted; choose two rules to benchmark it "
+    "against (one can be 'No response').",
+)
+_rem = [k for k in _rule_keys if k != cmp1]  # second choice can't duplicate the first
+st.session_state.setdefault("ocp_cmp2", "held")
+if st.session_state["ocp_cmp2"] == cmp1:
+    st.session_state["ocp_cmp2"] = _rem[0]
+cmp2 = _cc[1].selectbox(
+    "Compare against ②", _rem, format_func=lambda k: RULE_LABELS[k], key="ocp_cmp2",
+)
+comparators = [cmp1, cmp2]
+taylor_coef = 0.5
+if "taylor" in comparators:
+    taylor_coef = _cc[2].number_input(
+        "Taylor output-gap coef.", min_value=0.0, max_value=2.0, value=0.5, step=0.25,
+        key="ocp_taycoef", help="0.5 = classic Taylor; 1.0 = balanced-approach.",
+    )
+else:
+    _cc[2].caption("​")  # keep the row height stable
+
 if expectations == "mce":
     st.caption("⏳ MCE builds the full anticipation matrix — one solve per quarter, a couple of minutes.")
 st.caption(
@@ -177,6 +206,7 @@ if run:
                 tuple(shock_specs),
                 (("inflation", w_pi), ("unemployment", w_u), ("smoothing", w_sm)),
                 expectations, "2026Q3", int(horizon),
+                tuple(comparators), float(taylor_coef),
             )
         except Exception as exc:  # noqa: BLE001
             st.error(f"Optimisation failed: {type(exc).__name__}: {exc}")
@@ -197,24 +227,36 @@ _ocp_meta = st.session_state.get("ocp_meta", {"expectations": "var", "stem": "sh
 paths = out["paths"]
 x = [pd.Period(q, freq="Q").to_timestamp() for q in out["window"]]
 losses = out["losses"]
+comps = out["comparators"]
 
-c1, c2, c3, c4 = st.columns(4)
-c1.metric("Loss — optimal", f"{losses['optimal']:.2f}")
-c2.metric("Loss — Taylor rule", f"{losses['taylor']:.2f}",
-          delta=f"{losses['optimal'] - losses['taylor']:+.2f}", delta_color="inverse")
-c3.metric("Loss — no response", f"{losses['held']:.2f}",
-          delta=f"{losses['optimal'] - losses['held']:+.2f}", delta_color="inverse")
-c4.metric("Linear-approx error", f"{out['approx_error']:.3f} pp")
+# Short metric labels for the shown rules.
+_SHORT = {
+    "held": "no response", "inertial": "inertial rule",
+    "balanced_approach": "balanced-approach", "taylor": "Taylor rule",
+    "first_difference": "first-difference",
+}
+_mcols = st.columns(2 + len(comps))
+_mcols[0].metric("Loss — optimal", f"{losses['optimal']:.2f}")
+for _i, _key in enumerate(comps):
+    _mcols[1 + _i].metric(
+        f"Loss — {_SHORT.get(_key, _key)}", f"{losses[_key]:.2f}",
+        delta=f"{losses['optimal'] - losses[_key]:+.2f}", delta_color="inverse",
+    )
+_mcols[-1].metric("Linear-approx error", f"{out['approx_error']:.3f} pp")
+
+# Plot the optimal (always) plus the two chosen comparators.
+_scen_style = [("optimal", _OPT, "Optimal control", "solid")]
+for _i, _key in enumerate(comps):
+    _scen_style.append((_key, _CMP_COLORS[_i % len(_CMP_COLORS)], RULE_LABELS[_key], "dash"))
 
 titles = ["Federal funds rate (pp dev.)", "PCE inflation (pp dev.)", "Unemployment (pp dev.)"]
 fig = make_subplots(rows=1, cols=3, subplot_titles=titles, horizontal_spacing=0.07)
 series = [("rff", 1), ("pi", 2), ("u", 3)]
 for suffix, col in series:
-    for scen, color, name in (("optimal", _OPT, "Optimal control"),
-                              ("taylor", _TAY, "Taylor rule"),
-                              ("held", _HELD, "No response (held)")):
+    for scen, color, name, dash in _scen_style:
         fig.add_trace(
-            go.Scatter(x=x, y=paths[f"{scen}_{suffix}"], name=name, line=dict(color=color, width=2.5),
+            go.Scatter(x=x, y=paths[f"{scen}_{suffix}"], name=name,
+                       line=dict(color=color, width=2.5, dash=dash),
                        legendgroup=scen, showlegend=(col == 1)),
             row=1, col=col,
         )
@@ -226,9 +268,10 @@ fig.update_layout(
 )
 st.plotly_chart(fig, use_container_width=True)
 st.caption(
-    "The optimal path typically moves the funds rate **earlier and more "
-    "aggressively** than the Taylor rule, achieving smaller inflation and "
-    "unemployment gaps (a lower loss)."
+    "The optimal path (solid green) minimises the loss by construction, so it "
+    "achieves a smaller combined inflation/unemployment gap than any rule it is "
+    "compared against — typically by moving **earlier and more aggressively**. "
+    "For supply shocks an aggressive rule can itself do worse than no response."
 )
 
 st.download_button(
@@ -245,12 +288,23 @@ with st.expander("Method & caveats"):
         "quadratic loss is minimised in closed form. Under VAR the response matrix "
         "is Toeplitz (one extra solve); under MCE it is built one column per "
         "quarter to capture anticipation.\n"
+        "- **Comparator rules** (inertial, balanced-approach, Taylor, "
+        "first-difference — the Fed's Monetary Policy Report set) are evaluated in "
+        "the same linearised model: each is a linear feedback on the 4-quarter "
+        "inflation and output-gap deviations, so its funds-rate path solves a small "
+        "linear system from the same impulse responses. This reproduces the model's "
+        "own switch-based rules to within a few hundredths of a pp. 'No response' is "
+        "the funds rate held at baseline. The **Taylor** rule's output-gap "
+        "coefficient is adjustable (0.5 = classic Taylor, 1.0 = balanced-approach).\n"
         "- **Linear approximation:** exact for the linearised model; the reported "
-        "error is the max gap vs. re-solving the full nonlinear model along the "
-        "optimal path (a few hundredths of a pp for moderate shocks).\n"
+        "error is the max gap vs. re-solving the full nonlinear model along each "
+        "shown path (a few hundredths of a pp for moderate shocks).\n"
         "- **Loss is in deviations from baseline** (optimal *stabilisation* of the "
         "shock). Raising the unemployment weight makes policy lean harder against "
-        "unemployment; raising smoothing makes the rate path gentler."
+        "unemployment; raising smoothing makes the rate path gentler. The optimum "
+        "minimises the loss by construction, but among the *rules*, the ranking is "
+        "shock-dependent — for supply shocks an aggressive rule can do worse than "
+        "no response."
     )
 
 # --- Footnote — loss + vintage ---

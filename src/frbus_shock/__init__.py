@@ -46,7 +46,14 @@ from .multipliers import (
     multiplier_table,
     run_multiplier,
 )
-from .optcontrol import DEFAULT_WEIGHTS, OCPResult, run_optimal_control
+from .optcontrol import (
+    DEFAULT_COMPARATORS,
+    DEFAULT_TAYLOR_COEF,
+    DEFAULT_WEIGHTS,
+    RULE_LABELS,
+    OCPResult,
+    run_optimal_control,
+)
 from .shocks import (
     CATALOGUE,
     SCENARIO_PRESETS,
@@ -82,6 +89,9 @@ __all__ = [
     "run_optimal_control",
     "OCPResult",
     "DEFAULT_WEIGHTS",
+    "DEFAULT_COMPARATORS",
+    "DEFAULT_TAYLOR_COEF",
+    "RULE_LABELS",
     "deviations",
     "deviation_panel",
     "levels_panel",
