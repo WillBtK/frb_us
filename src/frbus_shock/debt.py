@@ -23,6 +23,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Dict, List, Sequence, Tuple
 
+import numpy as np
 import pandas as pd
 
 from . import policy
@@ -77,6 +78,13 @@ class DebtResult:
     feedback: Tuple[float, float] = (0.0, 0.0)  # (beta_debt, beta_deficit) bps/pp
     # {fiscal_rule: bool} — did the sovereign-risk feedback reach a fixed point?
     converged: Dict[str, bool] = field(default_factory=dict)
+    # Baseline (no-shock) *levels* of each debt output over the window — lets the UI
+    # show the actual debt/GDP path (level = baseline_levels + deviations).
+    baseline_levels: pd.DataFrame = field(default_factory=pd.DataFrame)
+
+    def levels(self, rule: str) -> pd.DataFrame:
+        """Actual level path of each debt output under ``rule`` (baseline + deviation)."""
+        return self.baseline_levels.add(self.deviations[rule], fill_value=0.0)
 
 
 def run_debt_comparison(
@@ -145,8 +153,137 @@ def run_debt_comparison(
             df[key] = (_level(sim, key) - _level(baseline, key)).loc[window].values
         deviations[rule] = df
 
+    base_levels = pd.DataFrame(
+        {key: _level(baseline, key).loc[window].values for key in DEBT_OUTPUT_KEYS},
+        index=window,
+    )
     return DebtResult(
         start=start_p, window=window, fiscal_rules=rules, policy_rule=policy_rule,
         requests=requests, deviations=deviations, feedback=(beta_debt, beta_deficit),
-        converged=converged,
+        converged=converged, baseline_levels=base_levels,
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Clean deficit-shock scenario (intuitive % of GDP input)                     #
+# --------------------------------------------------------------------------- #
+def _solve_debt_shock(frbus, start_p, disp_end, adds, baseline, gtrd_path,
+                      beta_debt, beta_deficit, max_iter=6, tol=0.03, blowup=1000.0):
+    """Solve with transfers (``gtrd``) exogenised at ``gtrd_path`` (the fiscal shock),
+    optionally iterating the sovereign-risk term-premium feedback to a fixed point.
+    Returns ``(sim, converged)``."""
+    window = pd.period_range(start_p, disp_end, freq="Q")
+    use_fb = beta_debt > 0 or beta_deficit > 0
+    exog = ["gtrd", "rg10p"] if use_fb else ["gtrd"]
+    base_debt = _debt_level(baseline, window)
+    base_def = _primary_deficit_level(baseline, window)
+    base_tp = adds.loc[window, "rg10p"].to_numpy()
+
+    frbus.exogenize(exog)
+    try:
+        add = np.zeros(len(window))
+        prev = None
+        converged = True
+        sim = None
+        for _it in range(1, (max_iter if use_fb else 1) + 1):
+            data = adds.copy()
+            data.loc[start_p:disp_end, "gtrd"] = gtrd_path
+            if use_fb:
+                data.loc[start_p:disp_end, "rg10p"] = base_tp + add
+            sim = _solve_robust(frbus, start_p, disp_end, data)
+            if not use_fb:
+                break
+            ddev = _debt_level(sim, window) - base_debt
+            if not np.all(np.isfinite(ddev)) or np.max(np.abs(ddev)) > blowup:
+                converged = False
+                break
+            if prev is not None and np.max(np.abs(ddev - prev)) < tol:
+                converged = True
+                break
+            prev = ddev
+            fdev = _primary_deficit_level(sim, window) - base_def
+            add = (beta_debt / 100.0) * ddev + (beta_deficit / 100.0) * fdev
+        return sim, converged
+    finally:
+        frbus.exogenize([])
+
+
+def _debt_level(frame, window):
+    return (100.0 * frame.loc[window, "gfdbtnp"] / frame.loc[window, "xgdpn"]).to_numpy()
+
+
+def _primary_deficit_level(frame, window):
+    num = frame.loc[window, "gfsrpn"] + frame.loc[window, "gfintn"]
+    return (-100.0 * num / frame.loc[window, "xgdpn"]).to_numpy()
+
+
+def run_debt_scenario(
+    deficit_pct: float,
+    deficit_years: int,
+    fiscal_rules: Sequence[str] = tuple(policy.FISCAL_RULES),
+    policy_rule: str = "inertial",
+    start: str = "2026Q3",
+    horizon: int = DEFAULT_HORIZON,
+    feedback: Tuple[float, float] = (0.0, 0.0),
+) -> DebtResult:
+    """Debt paths from a **sustained deficit shock of ``deficit_pct`` % of GDP**.
+
+    The shock is a rise in federal transfers held for ``deficit_years`` years,
+    implemented by exogenising ``gtrd`` (the transfers/GDP gap) so the impulse is an
+    intuitive, near-exact share of GDP — not a hard-to-read add-factor magnitude. It
+    is run under each fiscal closure rule (which sets how *taxes* respond), with the
+    optional sovereign-risk feedback.
+    """
+    if horizon < 1 or deficit_years < 1:
+        raise ValueError("horizon and deficit_years must be at least 1")
+    if policy_rule not in policy.ACTIVE_RULES:
+        raise ValueError(f"unknown policy_rule '{policy_rule}'")
+    rules = [r for r in fiscal_rules if r in policy.FISCAL_RULES]
+    if not rules:
+        raise ValueError("no valid fiscal_rules given")
+
+    beta_debt, beta_deficit = feedback
+    start_p = pd.Period(start, freq="Q")
+    disp_end = start_p + (horizon - 1)
+    window = pd.period_range(start_p, disp_end, freq="Q")
+    n_shock = min(deficit_years * 4, horizon)
+
+    # Baseline levels — from the shared (never-exogenised) cached model.
+    base_data = _fiscal_baseline_config(
+        load_baseline(), start_p, disp_end, "var", policy.DEFAULT_FISCAL_RULE
+    )
+    baseline = load_frbus("var").init_trac(start_p, disp_end, base_data)
+    base_levels = pd.DataFrame(
+        {key: _level(baseline, key).loc[window].values for key in DEBT_OUTPUT_KEYS},
+        index=window,
+    )
+
+    deviations: Dict[str, pd.DataFrame] = {}
+    converged: Dict[str, bool] = {}
+    for rule in rules:
+        # A fresh model per rule — exogenising then discarding avoids the corrupted
+        # state that reusing an exogenised instance leaves for the next init_trac.
+        frbus = fresh_frbus()
+        data = _fiscal_baseline_config(load_baseline(), start_p, disp_end, "var", rule)
+        if policy_rule != policy.DEFAULT_RULE:
+            data = policy.set_active_rule(data, policy_rule, start_p, disp_end)
+        adds = frbus.init_trac(start_p, disp_end, data)
+        # Transfers path: baseline + deficit_pct (% of GDP) for the shock years.
+        gtrd_path = adds.loc[start_p:disp_end, "gtrd"].copy()
+        gtrd_path.iloc[:n_shock] = gtrd_path.iloc[:n_shock].values + deficit_pct / 100.0
+
+        sim, conv = _solve_debt_shock(
+            frbus, start_p, disp_end, adds, baseline, gtrd_path.values,
+            beta_debt, beta_deficit,
+        )
+        converged[rule] = conv
+        df = pd.DataFrame(index=window)
+        for key in DEBT_OUTPUT_KEYS:
+            df[key] = (_level(sim, key) - _level(baseline, key)).loc[window].values
+        deviations[rule] = df
+
+    return DebtResult(
+        start=start_p, window=window, fiscal_rules=rules, policy_rule=policy_rule,
+        requests=[], deviations=deviations, feedback=(beta_debt, beta_deficit),
+        converged=converged, baseline_levels=base_levels,
     )

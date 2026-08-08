@@ -61,6 +61,7 @@ from .debt import (
     DEBT_UNITS,
     DebtResult,
     run_debt_comparison,
+    run_debt_scenario,
 )
 from .feedback import DEFAULT_FEEDBACK, FEEDBACK_PRESETS, solve_with_feedback
 from .policy import ACTIVE_RULES, DEFAULT_FISCAL_RULE, DEFAULT_RULE, FISCAL_RULES
@@ -92,6 +93,7 @@ __all__ = [
     "FISCAL_RULES",
     "DEFAULT_FISCAL_RULE",
     "run_debt_comparison",
+    "run_debt_scenario",
     "DebtResult",
     "FEEDBACK_PRESETS",
     "DEFAULT_FEEDBACK",

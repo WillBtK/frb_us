@@ -84,10 +84,11 @@ n_shocks = _s[0].selectbox(
     "centre the fan on a fiscal scenario.",
 )
 fiscal_rule = _s[1].selectbox(
-    "Fiscal closure rule", list(FISCAL_RULES), format_func=lambda k: FISCAL_RULES[k][1],
-    key="fan_frule",
+    "Fiscal response", list(FISCAL_RULES),
+    index=list(FISCAL_RULES).index("surplus_ratio"),
+    format_func=lambda k: FISCAL_RULES[k][1], key="fan_frule",
     help="How the government stabilises debt. Compare a stabilising rule (a bounded "
-    "fan) with 'no stabilisation' (a fan that widens and drifts up).",
+    "fan) with 'no fiscal response' (a fan that widens and drifts up).",
 )
 policy_rule = _s[2].selectbox(
     "Monetary response", list(ACTIVE_RULES), format_func=lambda k: ACTIVE_RULES[k][1],

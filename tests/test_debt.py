@@ -78,3 +78,30 @@ def test_no_feedback_matches_plain_run():
     assert a.deviations["surplus_ratio"]["debt_gdp"].equals(
         b.deviations["surplus_ratio"]["debt_gdp"])
     assert all(a.converged.values())
+
+
+def test_debt_scenario_levels_and_response():
+    """A deficit shock in % of GDP yields sensible debt/GDP *levels* per response."""
+    from frbus_shock import run_debt_scenario
+
+    r = run_debt_scenario(deficit_pct=2.0, deficit_years=5, start="2026Q3", horizon=40)
+    # Baseline debt/GDP is a realistic level (tens of percent), not raw dollars.
+    assert 80.0 < r.baseline_levels["debt_gdp"].iloc[0] < 130.0
+    end = {rule: r.levels(rule)["debt_gdp"].iloc[-1] for rule in r.fiscal_rules}
+    # No fiscal response leaves debt/GDP higher than active stabilisation.
+    assert end["exogenous_taxes"] > end["debt_stabilization"]
+    # The shock raises debt above baseline under no response.
+    assert r.levels("exogenous_taxes")["debt_gdp"].iloc[-1] > r.baseline_levels["debt_gdp"].iloc[-1]
+    # levels() == baseline + deviation, by construction.
+    lvl = r.levels("exogenous_taxes")["debt_gdp"]
+    recon = r.baseline_levels["debt_gdp"] + r.deviations["exogenous_taxes"]["debt_gdp"]
+    assert (lvl - recon).abs().max() < 1e-9
+
+
+def test_debt_scenario_consolidation_lowers_debt():
+    """A negative deficit shock (consolidation) lowers debt/GDP vs. baseline."""
+    from frbus_shock import run_debt_scenario
+
+    r = run_debt_scenario(deficit_pct=-2.0, deficit_years=5,
+                          fiscal_rules=["exogenous_taxes"], start="2026Q3", horizon=40)
+    assert r.levels("exogenous_taxes")["debt_gdp"].iloc[-1] < r.baseline_levels["debt_gdp"].iloc[-1]

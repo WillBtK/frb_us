@@ -89,23 +89,22 @@ DEFAULT_RULE = "inertial"
 # debt returns to its baseline path after a shock. Values: (switch settings, label,
 # tooltip). Order is the dropdown order.
 FISCAL_RULES: Dict[str, Tuple[Dict[str, int], str, str]] = {
+    "exogenous_taxes": (
+        {"dfpsrp": 0, "dfpdbt": 0, "dfpex": 1}, "No fiscal response (deficit-financed)",
+        "Tax rates do NOT respond to the deficit or the debt — the government simply "
+        "borrows to cover the shock, so debt/GDP can climb without returning. This is "
+        "the 'is the path sustainable?' benchmark.",
+    ),
     "surplus_ratio": (
-        {"dfpsrp": 1, "dfpdbt": 0, "dfpex": 0}, "Surplus-ratio targeting",
-        "FRB/US's default. The personal tax rate adjusts to steer the budget surplus "
-        "toward a target share of GDP, so debt is stabilised indirectly. A moderate, "
-        "gradual stabiliser.",
+        {"dfpsrp": 1, "dfpdbt": 0, "dfpex": 0}, "Gradual correction (surplus target)",
+        "FRB/US's default. Tax rates adjust slowly to nudge the budget surplus toward a "
+        "share-of-GDP target, so debt is stabilised — but only gradually.",
     ),
     "debt_stabilization": (
-        {"dfpsrp": 0, "dfpdbt": 1, "dfpex": 0}, "Debt-ratio stabilisation",
-        "Taxes adjust to hold the federal debt-to-GDP ratio on its baseline path — the "
-        "government leans directly against debt. The strongest stabiliser: debt/GDP is "
-        "pulled back (and can briefly overshoot) as taxes rise.",
-    ),
-    "exogenous_taxes": (
-        {"dfpsrp": 0, "dfpdbt": 0, "dfpex": 1}, "No stabilisation (exogenous taxes)",
-        "Tax rates follow their exogenous trend and do NOT respond to the budget or the "
-        "debt. A deficit shock then accumulates — debt/GDP can drift up without "
-        "returning. The 'is this path sustainable?' benchmark.",
+        {"dfpsrp": 0, "dfpdbt": 1, "dfpex": 0}, "Active stabilisation (debt target)",
+        "Tax rates adjust to pull the debt-to-GDP ratio back to its baseline path — the "
+        "government leans directly and firmly against debt (debt/GDP can briefly "
+        "overshoot below baseline as taxes rise).",
     ),
 }
 DEFAULT_FISCAL_RULE = "surplus_ratio"

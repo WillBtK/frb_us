@@ -66,15 +66,17 @@ baseline) side by side.
   disturbances and named scenarios** as the Shock Analysis tab (minus the
   funds-rate-rule shock, which is the control variable here). VAR is the fast
   default; model-consistent (MCE) anticipation is a slower opt-in.
-- **Debt-Sustainability page** (a fourth tab): runs a fiscal shock under each of
-  FRB/US's **fiscal closure rules** — surplus-ratio targeting, debt-ratio
-  stabilisation, or no stabilisation (exogenous taxes) — over a long horizon
-  (up to 20 years), and charts the resulting **debt/GDP, primary balance, budget
-  balance, net-interest/debt-service, and r − g** paths side by side. The contrast
-  between a stabilising rule (debt/GDP returns to baseline) and a non-stabilising
-  one (debt/GDP drifts up) is the debt-sustainability question. VAR-only. An
-  optional **sovereign-risk feedback** (see below) feeds debt/deficit back into
-  bond yields.
+- **Debt-Sustainability page** (a fourth tab): you set a **deficit shock as a share
+  of GDP** (how much bigger the deficit gets, and for how many years — implemented
+  cleanly by pinning the transfers/GDP path), and the tab charts the **actual
+  federal debt/GDP level** (anchored to the Fed's projection, not just a deviation)
+  under three plain-language fiscal responses — **no fiscal response
+  (deficit-financed)**, **gradual correction (surplus target)**, or **active
+  stabilisation (debt target)** — plus the primary balance, budget balance,
+  net-interest/debt-service, and r − g. A path that keeps climbing is the
+  unsustainable case; one that returns toward baseline is stabilised. Long horizon
+  (up to 20 years), VAR-only. An optional **sovereign-risk feedback** (see below)
+  feeds debt/deficit back into bond yields.
 - **Debt Fan Charts page** (a fifth tab): the **distribution** of debt/GDP paths
   under macroeconomic uncertainty, from FRB/US's **stochastic simulation** (a
   block-bootstrap of the model's 52 estimated equation residuals over 1975Q1–
