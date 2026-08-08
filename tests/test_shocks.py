@@ -32,6 +32,34 @@ def test_funds_rate_hold_pins_rff():
     assert active_rff > 0.01
 
 
+def test_policy_rule_selection():
+    """Each selectable policy rule solves, tracks baseline, and responds distinctly."""
+    from frbus_shock import ACTIVE_RULES
+
+    shock = [{"key": "consumption", "magnitude": -1.0, "duration": 4}]
+    default = run_simulation(shocks=shock, horizon=12)
+    inertial = run_simulation(shocks=shock, horizon=12, policy_rule="inertial")
+    # Default is the inertial rule (backward compatible).
+    assert (deviations(default, "active")["hggdp"]
+            .equals(deviations(inertial, "active")["hggdp"]))
+
+    rff_by_rule = {}
+    for rule in ACTIVE_RULES:
+        res = run_simulation(shocks=shock, horizon=12, policy_rule=rule)
+        # Every rule still pins the funds rate under the held scenario.
+        assert deviations(res, "held")["rff"].abs().max() < 1e-6
+        # Metadata records the rule.
+        assert res.policy_rule == rule
+        rff_by_rule[rule] = deviations(res, "active")["rff"].iloc[3]
+    # A non-inertial rule reacts differently from the inertial default.
+    assert abs(rff_by_rule["balanced_approach"] - rff_by_rule["inertial"]) > 0.05
+
+
+def test_unknown_policy_rule_rejected():
+    with pytest.raises(ValueError):
+        run_simulation("consumption", policy_rule="not_a_rule", horizon=8)
+
+
 def test_fiscal_spending_is_expansionary():
     result = run_simulation("fiscal_spending", magnitude=1.0, duration=8, horizon=12)
     assert _dev(result, "active", "hggdp") > 0  # growth rises on impact-ish
