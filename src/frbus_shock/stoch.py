@@ -25,6 +25,7 @@ import numpy as np
 import pandas as pd
 
 from . import policy
+from .feedback import fresh_frbus, solve_with_feedback
 from .model import load_baseline, load_frbus
 from .simulate import _fiscal_baseline_config, _resolve_requests, _solve_robust
 
@@ -51,6 +52,8 @@ class FanResult:
     central_primary: np.ndarray
     primary_pct: Dict[int, np.ndarray]
     prob_rising: float  # P(debt/GDP at horizon > its starting level)
+    feedback: tuple = (0.0, 0.0)  # (beta_debt, beta_deficit) bps/pp
+    feedback_converged: bool = True  # did the central-path feedback settle?
     requests: list = field(default_factory=list)
 
 
@@ -73,14 +76,24 @@ def debt_fan_chart(
     seed: int = 12345,
     resid_start: str = DEFAULT_RESID[0],
     resid_end: str = DEFAULT_RESID[1],
+    feedback: tuple = (0.0, 0.0),
 ) -> FanResult:
-    """Stochastic debt/GDP fan chart around a (optionally shocked) baseline."""
+    """Stochastic debt/GDP fan chart around a (optionally shocked) baseline.
+
+    ``feedback`` = ``(beta_debt, beta_deficit)`` in bps/pp adds a sovereign-risk
+    feedback: the term premium is set on the *deterministic central path* (a fixed
+    point) and imposed across the draws — a central-path approximation that carries
+    the debt-spiral amplification into the whole fan without a fixed point per draw.
+    """
     if nrepl < 5:
         raise ValueError("nrepl must be at least 5")
     if fiscal_rule not in policy.FISCAL_RULES:
         raise ValueError(f"unknown fiscal_rule '{fiscal_rule}'")
     if policy_rule not in policy.ACTIVE_RULES:
         raise ValueError(f"unknown policy_rule '{policy_rule}'")
+
+    beta_debt, beta_deficit = feedback
+    use_feedback = beta_debt > 0 or beta_deficit > 0
 
     start_p = pd.Period(start, freq="Q")
     disp_end = start_p + (horizon - 1)
@@ -100,14 +113,31 @@ def debt_fan_chart(
     requests = _resolve_requests(shocks, None, None, None, None, None) if shocks else []
     for req in requests:
         shocked = req.spec.apply(shocked, req.magnitude, req.duration, start_p)
-    central = _solve_robust(frbus, start_p, disp_end, shocked)
+
+    fb_converged = True
+    stoch_frbus = frbus
+    if use_feedback:
+        # Central-path feedback: iterate the term premium to a fixed point, then
+        # impose that path (exogenised) across the stochastic draws.
+        fb_frbus = fresh_frbus()
+        central, _s0, fb_converged, _it, tp_path = solve_with_feedback(
+            fb_frbus, start_p, disp_end, shocked, with_adds, beta_debt, beta_deficit
+        )
+        shocked = shocked.copy()
+        shocked.loc[window, "rg10p"] = tp_path
+        fb_frbus.exogenize(["rg10p"])
+        stoch_frbus = fb_frbus
+    else:
+        central = _solve_robust(frbus, start_p, disp_end, shocked)
 
     # Stochastic replications (block-bootstrap of residuals over the sim window).
     nextra = max(5, nrepl // 8)
     sols = stochsim(
-        frbus, nrepl, shocked, start_p, disp_end, resid_start, resid_end,
+        stoch_frbus, nrepl, shocked, start_p, disp_end, resid_start, resid_end,
         multiproc=False, nextra=nextra, seed=seed, options=None,
     )
+    if use_feedback:
+        stoch_frbus.exogenize([])  # tidy (instance is discarded regardless)
     ok = [s for s in sols if not isinstance(s, str)][:nrepl]
     if len(ok) < 5:
         raise RuntimeError(f"only {len(ok)} replications converged; try fewer/smaller shocks")
@@ -124,5 +154,7 @@ def debt_fan_chart(
         nrepl=len(ok), resid_window=(resid_start, resid_end),
         baseline_debt=baseline_debt, central_debt=_debt_gdp(central, window),
         debt_pct=debt_pct, central_primary=_primary(central, window),
-        primary_pct=primary_pct, prob_rising=prob_rising, requests=requests,
+        primary_pct=primary_pct, prob_rising=prob_rising,
+        feedback=(beta_debt, beta_deficit), feedback_converged=fb_converged,
+        requests=requests,
     )

@@ -18,7 +18,7 @@ from typing import Callable, List, Sequence, Tuple
 
 import streamlit as st
 
-from frbus_shock import CATALOGUE, SCENARIO_PRESETS
+from frbus_shock import CATALOGUE, DEFAULT_FEEDBACK, FEEDBACK_PRESETS, SCENARIO_PRESETS
 
 CUSTOM = "__custom__"
 
@@ -90,6 +90,40 @@ def render_scenario_loader(prefix: str, exclude_keys: Sequence[str] = ()) -> Non
             st.session_state[f"{prefix}_mag_{i}"] = float(s["magnitude"])
             st.session_state[f"{prefix}_dur_{i}"] = int(s["duration"])
         st.rerun()
+
+
+def render_feedback_control(prefix: str) -> Tuple[float, float]:
+    """Sovereign-risk feedback: an elasticity preset plus editable β sliders.
+
+    Returns ``(beta_debt, beta_deficit)`` in bps of the 10-year rate per 1pp of
+    debt/GDP and primary-deficit/GDP. A newly chosen preset repopulates the sliders
+    (which stay editable) — the same mechanism as the loss-weight presets.
+    """
+    keys = list(FEEDBACK_PRESETS)
+    st.session_state.setdefault(f"{prefix}_bd", FEEDBACK_PRESETS[DEFAULT_FEEDBACK][0])
+    st.session_state.setdefault(f"{prefix}_bdef", FEEDBACK_PRESETS[DEFAULT_FEEDBACK][1])
+    st.session_state.setdefault(f"{prefix}_fbpreset", DEFAULT_FEEDBACK)
+
+    cols = st.columns([2, 1, 1])
+    preset = cols[0].selectbox(
+        "Sovereign-risk feedback (debt → yields)", keys,
+        format_func=lambda k: FEEDBACK_PRESETS[k][2], key=f"{prefix}_fbpreset",
+        help="Feeds the debt/deficit back into the 10-year term premium and re-solves "
+        "to a fixed point (higher rates → higher debt service → higher debt). Bps of "
+        "the 10-year rate per 1pp:\n\n"
+        + "\n\n".join(f"**{FEEDBACK_PRESETS[k][2]}** — {FEEDBACK_PRESETS[k][3]}" for k in keys),
+    )
+    if st.session_state.get(f"_{prefix}_fbprev") != preset:
+        st.session_state[f"{prefix}_bd"] = FEEDBACK_PRESETS[preset][0]
+        st.session_state[f"{prefix}_bdef"] = FEEDBACK_PRESETS[preset][1]
+    st.session_state[f"_{prefix}_fbprev"] = preset
+
+    beta_debt = cols[1].slider("β debt (bps per pp)", 0.0, 8.0, step=0.5, key=f"{prefix}_bd")
+    beta_deficit = cols[2].slider("β deficit (bps per pp)", 0.0, 40.0, step=1.0,
+                                  key=f"{prefix}_bdef",
+                                  help="On the primary deficit — avoids double-counting "
+                                  "the interest spiral already in the debt channel.")
+    return float(beta_debt), float(beta_deficit)
 
 
 def render_shock_rows(

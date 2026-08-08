@@ -53,3 +53,28 @@ def test_fiscal_rule_threads_through_run_simulation():
 def test_unknown_fiscal_rule_rejected():
     with pytest.raises(ValueError):
         run_simulation("fiscal_spending", fiscal_rule="not_a_rule", horizon=8)
+
+
+def test_sovereign_feedback_amplifies_debt():
+    """The debt→yield feedback raises the debt path vs. no feedback (persistent deficit)."""
+    shock = [{"key": "fiscal_spending", "magnitude": 3.0, "duration": 40}]
+    off = run_debt_comparison(shocks=shock, fiscal_rules=["exogenous_taxes"],
+                              start="2026Q3", horizon=40, feedback=(0.0, 0.0))
+    on = run_debt_comparison(shocks=shock, fiscal_rules=["exogenous_taxes"],
+                             start="2026Q3", horizon=40, feedback=(3.5, 25.0))
+    end_off = off.deviations["exogenous_taxes"]["debt_gdp"].iloc[-1]
+    end_on = on.deviations["exogenous_taxes"]["debt_gdp"].iloc[-1]
+    assert end_on > end_off  # feedback amplifies the debt trajectory
+    assert on.feedback == (3.5, 25.0)
+    assert on.converged["exogenous_taxes"] in (True, False)  # a bool is recorded
+
+
+def test_no_feedback_matches_plain_run():
+    """feedback=(0,0) reproduces the no-feedback debt paths exactly."""
+    shock = [{"key": "fiscal_spending", "magnitude": 2.0, "duration": 8}]
+    a = run_debt_comparison(shocks=shock, fiscal_rules=["surplus_ratio"], horizon=20)
+    b = run_debt_comparison(shocks=shock, fiscal_rules=["surplus_ratio"], horizon=20,
+                            feedback=(0.0, 0.0))
+    assert a.deviations["surplus_ratio"]["debt_gdp"].equals(
+        b.deviations["surplus_ratio"]["debt_gdp"])
+    assert all(a.converged.values())

@@ -50,7 +50,7 @@ _SHOCK_OPTIONS, _shock_label = sc.shock_options(_SHOCK_GROUPS, exclude_keys={"mo
 
 
 @st.cache_data(show_spinner=False, ttl=3600, max_entries=32)
-def _cached_debt(shocks_spec, fiscal_rules, policy_rule, start, horizon):
+def _cached_debt(shocks_spec, fiscal_rules, policy_rule, start, horizon, feedback):
     shocks = []
     for kind, name, mag, dur in shocks_spec:
         if kind == "custom":
@@ -59,13 +59,15 @@ def _cached_debt(shocks_spec, fiscal_rules, policy_rule, start, horizon):
             shocks.append({"key": name, "magnitude": mag, "duration": dur})
     res = run_debt_comparison(
         shocks=shocks, fiscal_rules=list(fiscal_rules), policy_rule=policy_rule,
-        start=start, horizon=horizon,
+        start=start, horizon=horizon, feedback=feedback,
     )
     return {
         "deviations": {r: res.deviations[r] for r in res.fiscal_rules},
         "fiscal_rules": list(res.fiscal_rules),
         "window": [str(q) for q in res.window],
         "policy_rule": res.policy_rule,
+        "converged": dict(res.converged),
+        "feedback": tuple(res.feedback),
     }
 
 
@@ -106,6 +108,8 @@ fiscal_rules = st.multiselect(
     + "\n\n".join(f"**{lbl}** — {tip}" for _sw, lbl, tip in FISCAL_RULES.values()),
 )
 
+feedback = sc.render_feedback_control("debt")
+
 shock_specs = sc.render_shock_rows("debt", n_shocks, _SHOCK_OPTIONS, _shock_label)
 
 run = st.button("▶ Run debt analysis", type="primary")
@@ -119,10 +123,12 @@ if run:
     if not fiscal_rules:
         st.warning("Pick at least one fiscal closure rule to compare.")
         st.stop()
-    with st.spinner("Solving the shock under each fiscal closure rule…"):
+    _spin = ("Solving the shock under each fiscal closure rule"
+             + (" with sovereign-risk feedback…" if feedback[0] or feedback[1] else "…"))
+    with st.spinner(_spin):
         try:
             out = _cached_debt(tuple(shock_specs), tuple(fiscal_rules), policy_rule,
-                               start, int(horizon))
+                               start, int(horizon), tuple(feedback))
         except Exception as exc:  # noqa: BLE001
             st.error(f"Debt analysis failed: {type(exc).__name__}: {exc}")
             st.stop()
@@ -136,6 +142,19 @@ if out is None:
 rules = out["fiscal_rules"]
 devs = out["deviations"]
 x = [pd.Period(q, freq="Q").to_timestamp() for q in out["window"]]
+
+# Sovereign-risk feedback status: flag any closure rule whose feedback did not settle.
+_fb = out.get("feedback", (0.0, 0.0))
+if _fb[0] or _fb[1]:
+    _spiralled = [FISCAL_RULES[r][1] for r in rules if not out.get("converged", {}).get(r, True)]
+    _cap = (f"🔁 Sovereign-risk feedback on (debt {_fb[0]:g} bps/pp, deficit "
+            f"{_fb[1]:g} bps/pp) — debt/deficit feeds back into the 10-year rate.")
+    if _spiralled:
+        st.error(_cap + "  ⚠️ **Unstable debt spiral** — the feedback did not reach a "
+                 f"fixed point under: {', '.join(_spiralled)}. Debt and yields chase each "
+                 "other upward; read those paths as *diverging*, not a settled level.")
+    else:
+        st.info(_cap + "  All shown rules reached a stable fixed point.")
 
 
 def _line(key, height=320):

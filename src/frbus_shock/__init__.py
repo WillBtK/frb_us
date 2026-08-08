@@ -62,6 +62,7 @@ from .debt import (
     DebtResult,
     run_debt_comparison,
 )
+from .feedback import DEFAULT_FEEDBACK, FEEDBACK_PRESETS, solve_with_feedback
 from .policy import ACTIVE_RULES, DEFAULT_FISCAL_RULE, DEFAULT_RULE, FISCAL_RULES
 from .stoch import PERCENTILES, FanResult, debt_fan_chart
 from .shocks import (
@@ -92,6 +93,9 @@ __all__ = [
     "DEFAULT_FISCAL_RULE",
     "run_debt_comparison",
     "DebtResult",
+    "FEEDBACK_PRESETS",
+    "DEFAULT_FEEDBACK",
+    "solve_with_feedback",
     "DEBT_OUTPUTS",
     "DEBT_OUTPUT_KEYS",
     "DEBT_LABELS",

@@ -20,12 +20,13 @@ term-premium lever to the shock.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, List, Sequence, Tuple
 
 import pandas as pd
 
 from . import policy
+from .feedback import fresh_frbus, solve_with_feedback
 from .model import load_baseline, load_frbus
 from .outputs import OUTPUT_BY_KEY
 from .simulate import ShockRequest, _fiscal_baseline_config, _resolve_requests, _solve_robust
@@ -73,6 +74,9 @@ class DebtResult:
     requests: List[ShockRequest]
     # {fiscal_rule: DataFrame(index=window, columns=DEBT_OUTPUT_KEYS)} of deviations
     deviations: Dict[str, pd.DataFrame]
+    feedback: Tuple[float, float] = (0.0, 0.0)  # (beta_debt, beta_deficit) bps/pp
+    # {fiscal_rule: bool} — did the sovereign-risk feedback reach a fixed point?
+    converged: Dict[str, bool] = field(default_factory=dict)
 
 
 def run_debt_comparison(
@@ -81,8 +85,15 @@ def run_debt_comparison(
     policy_rule: str = "inertial",
     start: str = "2026Q3",
     horizon: int = DEFAULT_HORIZON,
+    feedback: Tuple[float, float] = (0.0, 0.0),
 ) -> DebtResult:
-    """Run one shock under each fiscal closure rule; return debt-ratio deviations."""
+    """Run one shock under each fiscal closure rule; return debt-ratio deviations.
+
+    ``feedback`` = ``(beta_debt, beta_deficit)`` in bps of the 10-year rate per 1pp of
+    debt/GDP and primary-deficit/GDP. When either is positive, a sovereign-risk
+    feedback is iterated to a fixed point per rule (see :mod:`frbus_shock.feedback`),
+    and each rule's convergence is recorded — non-convergence flags a debt spiral.
+    """
     if horizon < 1:
         raise ValueError("horizon must be at least 1 quarter")
     if policy_rule not in policy.ACTIVE_RULES:
@@ -91,10 +102,14 @@ def run_debt_comparison(
     if not rules:
         raise ValueError("no valid fiscal_rules given")
 
+    beta_debt, beta_deficit = feedback
+    use_feedback = beta_debt > 0 or beta_deficit > 0
+
     start_p = pd.Period(start, freq="Q")
     disp_end = start_p + (horizon - 1)
     window = pd.period_range(start_p, disp_end, freq="Q")
     frbus = load_frbus("var")
+    fb_frbus = fresh_frbus() if use_feedback else None
     requests = _resolve_requests(shocks, None, None, None, None, None)
 
     # Common no-shock baseline (default fiscal + inertial monetary) — the deviation
@@ -106,6 +121,7 @@ def run_debt_comparison(
     baseline = frbus.init_trac(start_p, disp_end, base_data)
 
     deviations: Dict[str, pd.DataFrame] = {}
+    converged: Dict[str, bool] = {}
     for rule in rules:
         data = _fiscal_baseline_config(load_baseline(), start_p, disp_end, "var", rule)
         if policy_rule != policy.DEFAULT_RULE:
@@ -113,7 +129,15 @@ def run_debt_comparison(
         adds = frbus.init_trac(start_p, disp_end, data)
         for req in requests:
             adds = req.spec.apply(adds, req.magnitude, req.duration, start_p)
-        sim = _solve_robust(frbus, start_p, disp_end, adds)
+
+        if use_feedback:
+            sim, _sim0, conv, _iters, _tp = solve_with_feedback(
+                fb_frbus, start_p, disp_end, adds, baseline, beta_debt, beta_deficit
+            )
+            converged[rule] = conv
+        else:
+            sim = _solve_robust(frbus, start_p, disp_end, adds)
+            converged[rule] = True
 
         df = pd.DataFrame(index=window)
         for key in DEBT_OUTPUT_KEYS:
@@ -123,5 +147,6 @@ def run_debt_comparison(
 
     return DebtResult(
         start=start_p, window=window, fiscal_rules=rules, policy_rule=policy_rule,
-        requests=requests, deviations=deviations,
+        requests=requests, deviations=deviations, feedback=(beta_debt, beta_deficit),
+        converged=converged,
     )

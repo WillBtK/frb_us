@@ -72,15 +72,26 @@ baseline) side by side.
   (up to 20 years), and charts the resulting **debt/GDP, primary balance, budget
   balance, net-interest/debt-service, and r − g** paths side by side. The contrast
   between a stabilising rule (debt/GDP returns to baseline) and a non-stabilising
-  one (debt/GDP drifts up) is the debt-sustainability question. VAR-only.
-  (Sovereign risk is not endogenous — add the term-premium lever to represent a
-  market repricing of debt.)
+  one (debt/GDP drifts up) is the debt-sustainability question. VAR-only. An
+  optional **sovereign-risk feedback** (see below) feeds debt/deficit back into
+  bond yields.
 - **Debt Fan Charts page** (a fifth tab): the **distribution** of debt/GDP paths
   under macroeconomic uncertainty, from FRB/US's **stochastic simulation** (a
   block-bootstrap of the model's 52 estimated equation residuals over 1975Q1–
   2019Q4) — the IMF/CBO debt-sustainability fan chart, with 50%/80% probability
   bands, a median, and a P(debt/GDP rising) read-out. Runs live (each draw is a
   full solve, so a run takes ~1–2 minutes; results are cached).
+- **Sovereign-risk feedback** (a toggle on both debt tabs): FRB/US does not
+  endogenise a debt-driven risk premium, so this **bolts one on** — the 10-year
+  term premium is set to its no-feedback value plus a premium proportional to the
+  debt/GDP and primary-deficit deviations, and the model is re-solved to a **fixed
+  point** (higher rates → higher debt service → higher debt → higher rates).
+  Elasticities are the standard empirical ones as presets — **CBO / Gamber–Seliski
+  (2019)** ≈2 bps per pp of debt/GDP, **Engen–Hubbard (2004)** ≈3 bps, **Laubach
+  (2009)** ≈3.5 bps on debt + ≈25 bps on the deficit — plus adjustable β sliders.
+  Non-convergence is reported as an **unstable debt spiral**. (A reduced-form
+  overlay, not a structural risk premium; the elasticity is a linear approximation
+  of what is likely a nonlinear, threshold relationship.)
 
 ## Vintages
 
@@ -148,7 +159,8 @@ src/frbus_shock/             Simulation library wrapping PyFRB/US
   ├─ multipliers.py          Fiscal output multipliers
   ├─ optcontrol.py           Linear-quadratic optimal control
   ├─ debt.py                 Debt-sustainability: shock under each fiscal closure rule
-  └─ stoch.py                Stochastic debt fan charts (block-bootstrap of residuals)
+  ├─ stoch.py                Stochastic debt fan charts (block-bootstrap of residuals)
+  └─ feedback.py             Sovereign-risk feedback: debt/deficit → yields → debt (fixed point)
 third_party/pyfrbus/         Vendored, patched PyFRB/US (public domain)
   ├─ pyfrbus/                Model platform code (3 compat patches)
   ├─ models/model.xml        FRB/US equations

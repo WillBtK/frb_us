@@ -41,7 +41,7 @@ _BAND = "#1f4e79"  # blue
 
 
 @st.cache_data(show_spinner=False, ttl=3600, max_entries=16)
-def _cached_fan(shocks_spec, fiscal_rule, policy_rule, start, horizon, nrepl):
+def _cached_fan(shocks_spec, fiscal_rule, policy_rule, start, horizon, nrepl, feedback):
     shocks = []
     for kind, name, mag, dur in shocks_spec:
         if kind == "custom":
@@ -50,7 +50,7 @@ def _cached_fan(shocks_spec, fiscal_rule, policy_rule, start, horizon, nrepl):
             shocks.append({"key": name, "magnitude": mag, "duration": dur})
     r = debt_fan_chart(
         shocks=shocks, fiscal_rule=fiscal_rule, policy_rule=policy_rule,
-        start=start, horizon=horizon, nrepl=nrepl,
+        start=start, horizon=horizon, nrepl=nrepl, feedback=feedback,
     )
     return {
         "window": [str(q) for q in r.window],
@@ -63,6 +63,8 @@ def _cached_fan(shocks_spec, fiscal_rule, policy_rule, start, horizon, nrepl):
         "nrepl": r.nrepl,
         "resid_window": r.resid_window,
         "fiscal_rule": r.fiscal_rule,
+        "feedback": tuple(r.feedback),
+        "feedback_converged": r.feedback_converged,
     }
 
 
@@ -108,6 +110,8 @@ _r2[1].caption(
     "so re-viewing is instant. Residuals are drawn from 1975Q1–2019Q4 (ex-COVID)."
 )
 
+feedback = sc.render_feedback_control("fan")
+
 shock_specs = sc.render_shock_rows("fan", n_shocks, _SHOCK_OPTIONS, _shock_label)
 
 run = st.button("▶ Run fan chart", type="primary")
@@ -118,7 +122,7 @@ if run:
     with st.spinner(f"Running {nrepl} stochastic replications…"):
         try:
             out = _cached_fan(tuple(shock_specs), fiscal_rule, policy_rule, start := "2026Q3",
-                              int(horizon), int(nrepl))
+                              int(horizon), int(nrepl), tuple(feedback))
         except Exception as exc:  # noqa: BLE001
             st.error(f"Fan chart failed: {type(exc).__name__}: {exc}")
             st.stop()
@@ -129,6 +133,17 @@ if out is None:
     st.info("Choose a fiscal closure rule (and optionally a shock), then press **Run "
             "fan chart**. The first run takes a minute or two.")
     st.stop()
+
+_fb = out.get("feedback", (0.0, 0.0))
+if _fb[0] or _fb[1]:
+    _msg = (f"🔁 Sovereign-risk feedback on (debt {_fb[0]:g} bps/pp, deficit {_fb[1]:g} "
+            "bps/pp), calibrated on the deterministic central path and imposed across "
+            "the draws.")
+    if out.get("feedback_converged", True):
+        st.info(_msg)
+    else:
+        st.error(_msg + "  ⚠️ **Unstable debt spiral** — the central-path feedback did "
+                 "not settle; read the fan as *diverging*.")
 
 x = [pd.Period(q, freq="Q").to_timestamp() for q in out["window"]]
 pct = out["debt_pct"]
