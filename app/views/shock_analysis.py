@@ -39,6 +39,7 @@ from plotly.subplots import make_subplots  # noqa: E402
 
 import _shock_controls as sc  # noqa: E402
 from frbus_shock import (  # noqa: E402
+    ACTIVE_RULES,
     DEFAULT_OUTPUTS,
     MODEL_VINTAGE,
     OUTPUT_BY_KEY,
@@ -61,7 +62,7 @@ _HELD_COLOR = "#c1440e"  # rust — without response
 # Cached model runner — Streamlit reuses results across identical parameters.  #
 # --------------------------------------------------------------------------- #
 @st.cache_data(show_spinner=False, ttl=3600, max_entries=64)
-def _cached_run(shocks_spec, expectations, start, horizon, variables):
+def _cached_run(shocks_spec, expectations, start, horizon, variables, policy_rule):
     """Run a (possibly multi-shock) simulation and return panels + metadata.
 
     ``shocks_spec`` is a tuple of ``(kind, name, magnitude, duration)`` — hashable
@@ -74,7 +75,8 @@ def _cached_run(shocks_spec, expectations, start, horizon, variables):
         else:
             shocks.append({"key": name, "magnitude": mag, "duration": dur})
     result = run_simulation(
-        shocks=shocks, expectations=expectations, start=start, horizon=horizon
+        shocks=shocks, expectations=expectations, start=start, horizon=horizon,
+        policy_rule=policy_rule,
     )
     keys = list(variables)
     return {
@@ -91,7 +93,8 @@ def _dates(window):
     return [pd.Period(q, freq="Q").to_timestamp() for q in window]
 
 
-def _build_figure(active: pd.DataFrame, held: pd.DataFrame, window, variables) -> go.Figure:
+def _build_figure(active: pd.DataFrame, held: pd.DataFrame, window, variables,
+                  active_label="With response (active rule)") -> go.Figure:
     """Grid of deviation charts, one per selected output variable (2 columns)."""
     cols = 2 if len(variables) > 1 else 1
     rows = math.ceil(len(variables) / cols)
@@ -107,7 +110,7 @@ def _build_figure(active: pd.DataFrame, held: pd.DataFrame, window, variables) -
         show_legend = i == 0
         fig.add_trace(
             go.Scatter(
-                x=x, y=active[var], name="With response (active rule)",
+                x=x, y=active[var], name=active_label,
                 line=dict(color=_ACTIVE_COLOR, width=2.5),
                 legendgroup="active", showlegend=show_legend,
             ),
@@ -144,8 +147,10 @@ def _summary_from_out(out, horizons):
     """
     n = len(out["window"])
     quarters = out["window"]
+    _rule = out.get("meta", {}).get("policy_rule", "inertial")
+    _rule_label = ACTIVE_RULES.get(_rule, (None, "active rule"))[1]
     scen_frames = [
-        ("With policy response (active rule)", out["active"]),
+        (f"With response — {_rule_label}", out["active"]),
         ("Without response (funds rate held)", out["held"]),
     ]
     rows = []
@@ -212,24 +217,40 @@ _exp_choices = expectations_choices()
 # --- Scenario presets — load a named multi-shock scenario into the controls ---
 sc.render_scenario_loader("shk")
 
+# Combined mouse-over explaining every policy-response rule (per-option tooltip).
+_RULE_HELP = (
+    "Which monetary-policy rule the **with-response** line follows. All four are "
+    "FRB/US's own reaction-function switches, so each is an exact, endogenous "
+    "solve (the rule reacts inside the model):\n\n"
+    + "\n\n".join(f"**{lbl}** — {tip}" for _sw, lbl, tip in ACTIVE_RULES.values())
+)
+
 # --- Global settings (one horizontal row of dropdowns) ---
 st.session_state.setdefault("shk_nsh", 1)
-_g = st.columns(4)
+_g = st.columns(5)
 n_shocks = _g[0].selectbox(
     "Number of shocks", [1, 2, 3, 4], key="shk_nsh",
     help="Apply several shocks at once — their effects combine in one run.",
 )
-expectations = _g[1].selectbox(
+policy_rule = _g[1].selectbox(
+    "Policy response", list(ACTIVE_RULES), format_func=lambda k: ACTIVE_RULES[k][1],
+    key="shk_rule", help=_RULE_HELP,
+)
+expectations = _g[2].selectbox(
     "Expectations", list(_exp_choices), format_func=lambda k: _exp_choices[k],
     help="VAR = backward-looking. MCE = model-consistent / rational (slower).",
 )
-start = _g[2].selectbox(
+start = _g[3].selectbox(
     "Start quarter", _START_OPTS, index=_START_OPTS.index(_START_NEAR),
     format_func=_fmt_start, help="When the shock hits, on the projection baseline.",
 )
-horizon = _g[3].selectbox(
+horizon = _g[4].selectbox(
     "Horizon (quarters)", list(range(4, 13)), index=8,
     help="Quarters shown, capped at 12 (3 years).",
+)
+st.caption(
+    f"↳ **With policy response** follows the **{ACTIVE_RULES[policy_rule][1]}** — "
+    f"{ACTIVE_RULES[policy_rule][2]}"
 )
 if expectations == "mce":
     st.caption("⏳ Model-consistent expectations solve over a longer horizon — slower.")
@@ -277,6 +298,7 @@ if run_clicked:
                 start,
                 int(horizon),
                 tuple(selected_outputs),
+                policy_rule,
             )
         except Exception as exc:  # noqa: BLE001 — surface solver/convergence errors
             st.error(
@@ -305,17 +327,25 @@ else:
     meta = out["meta"]
     _n_sh = meta.get("n_shocks", 1)
     _prefix = f"{_n_sh} shocks: " if _n_sh > 1 else ""
-    st.subheader(f"{_prefix}{meta['scenario']} · {meta['expectations'].upper()} expectations")
+    _rule_key = meta.get("policy_rule", "inertial")
+    _rule_label = ACTIVE_RULES.get(_rule_key, (None, "active rule"))[1]
+    st.subheader(
+        f"{_prefix}{meta['scenario']} · {meta['expectations'].upper()} expectations "
+        f"· {_rule_label}"
+    )
     st.caption("Showing the most recent run (parameters above). Press **Run "
                "simulation** to apply sidebar changes.")
 
-    fig = _build_figure(out["active"], out["held"], out["window"], out["variables"])
+    fig = _build_figure(
+        out["active"], out["held"], out["window"], out["variables"],
+        active_label=f"With response — {_rule_label}",
+    )
     st.plotly_chart(fig, use_container_width=True)
 
     st.caption(
-        "Solid = with policy response (active rule). Dashed = without response "
-        "(funds rate held at baseline). Deviations from baseline: percentage "
-        "points for rates/inflation, percent for level variables."
+        f"Solid = with policy response (**{_rule_label}**). Dashed = without "
+        "response (funds rate held at baseline). Deviations from baseline: "
+        "percentage points for rates/inflation, percent for level variables."
     )
 
     # -------------------- Summary: peak + effect at horizon -------------------- #

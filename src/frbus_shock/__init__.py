@@ -54,6 +54,7 @@ from .optcontrol import (
     OCPResult,
     run_optimal_control,
 )
+from .policy import ACTIVE_RULES, DEFAULT_RULE
 from .shocks import (
     CATALOGUE,
     SCENARIO_PRESETS,
@@ -76,6 +77,8 @@ __all__ = [
     "DEFAULT_HORIZON",
     "CATALOGUE",
     "SCENARIO_PRESETS",
+    "ACTIVE_RULES",
+    "DEFAULT_RULE",
     "ShockSpec",
     "ShockRequest",
     "get_shock",

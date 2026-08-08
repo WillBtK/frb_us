@@ -303,6 +303,7 @@ def run_metadata(result: SimResult) -> Dict[str, object]:
         "n_shocks": len(result.requests),
         "shocks": shocks,
         "expectations": result.expectations,
+        "policy_rule": getattr(result, "policy_rule", "inertial"),
         "start": str(result.start),
         "end": str(result.end),
     }

@@ -61,6 +61,7 @@ class SimResult:
     baseline: pd.DataFrame
     active: pd.DataFrame  # shock(s) + active policy rule (with response)
     held: pd.DataFrame  # shock(s) + funds rate held at baseline (without response)
+    policy_rule: str = "inertial"  # which rule the active scenario follows
 
     @property
     def window(self) -> pd.PeriodIndex:
@@ -119,6 +120,7 @@ def run_simulation(
     custom_variable: Optional[str] = None,
     custom_label: Optional[str] = None,
     shocks: Optional[Sequence[dict]] = None,
+    policy_rule: str = "inertial",
 ) -> SimResult:
     """Run a scenario twice — active rule and funds rate held — vs. baseline.
 
@@ -149,6 +151,10 @@ def run_simulation(
         raise ValueError("horizon must be at least 1 quarter")
     if expectations not in ("var", "mce"):
         raise ValueError("expectations must be 'var' or 'mce'")
+    if policy_rule not in policy.ACTIVE_RULES:
+        raise ValueError(
+            f"policy_rule must be one of {list(policy.ACTIVE_RULES)}, got '{policy_rule}'"
+        )
 
     requests = _resolve_requests(
         shocks, shock_key, magnitude, duration, custom_variable, custom_label
@@ -176,7 +182,15 @@ def run_simulation(
         return df
 
     # --- Scenario 1: active policy rule (with monetary response) ---
-    active_in = policy.apply_active_rule(baseline_adds.copy(), start_p, solve_end)
+    # The inertial rule is the baseline default (already tracked); any other rule is
+    # init_trac'd under its own switch so it, too, reproduces the baseline exactly
+    # (zero no-shock deviation) before the shock is applied. Baseline *levels* are
+    # identical across rules, so ``baseline_adds`` stays the deviation reference.
+    if policy_rule == policy.DEFAULT_RULE:
+        active_in = policy.apply_active_rule(baseline_adds.copy(), start_p, solve_end)
+    else:
+        ruled = policy.set_active_rule(data, policy_rule, start_p, solve_end)
+        active_in = frbus.init_trac(start_p, solve_end, ruled)
     active = _solve_robust(frbus, start_p, solve_end, _apply_all(active_in))
 
     # --- Scenario 2: funds rate held at baseline (no monetary response) ---
@@ -194,6 +208,7 @@ def run_simulation(
         baseline=baseline_adds.loc[sl].copy(),
         active=active.loc[sl].copy(),
         held=held.loc[sl].copy(),
+        policy_rule=policy_rule,
     )
 
 

@@ -31,8 +31,11 @@ baseline) side by side.
   configuration you can then edit.
 - **Expectations:** VAR-based (backward-looking) or **model-consistent /
   rational** (MCE, `mcap+wp` block).
-- **Monetary policy:** the active inertial Taylor rule vs. the funds rate held at
-  its baseline path — the with-response / without-response comparison.
+- **Monetary policy:** a selectable **policy-response rule** for the with-response
+  line — the inertial (Taylor) rule (default), the balanced-approach rule, the
+  Taylor rule with the unemployment gap, or an estimated historical rule (all
+  FRB/US's own reaction-function switches, so each is an exact endogenous solve) —
+  compared against the funds rate held at its baseline path (without response).
 - **Outputs:** a grouped, selectable menu (defaulting to GDP growth, unemployment,
   PCE inflation, and the funds rate). Add **Activity** (output gap; real GDP,
   consumption, investment as % deviations), **Inflation** (core PCE, CPI/core CPI,
