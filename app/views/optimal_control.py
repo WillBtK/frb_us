@@ -15,6 +15,9 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SRC = _REPO_ROOT / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
+_VIEWS = Path(__file__).resolve().parent
+if str(_VIEWS) not in sys.path:
+    sys.path.insert(0, str(_VIEWS))
 
 import matplotlib
 
@@ -25,7 +28,8 @@ import plotly.graph_objects as go  # noqa: E402
 import streamlit as st  # noqa: E402
 from plotly.subplots import make_subplots  # noqa: E402
 
-from frbus_shock import CATALOGUE, data_vintage, run_optimal_control  # noqa: E402
+import _shock_controls as sc  # noqa: E402
+from frbus_shock import data_vintage, run_optimal_control  # noqa: E402
 
 _OPT = "#1f7a3d"      # green — optimal
 _TAY = "#1f4e79"      # blue — Taylor
@@ -34,7 +38,12 @@ _HELD = "#c1440e"     # rust — no response
 
 @st.cache_data(show_spinner=False, ttl=3600, max_entries=32)
 def _cached_ocp(shocks_spec, weights, expectations, start, horizon):
-    shocks = [{"key": k, "magnitude": m, "duration": d} for k, m, d in shocks_spec]
+    shocks = []
+    for kind, name, mag, dur in shocks_spec:
+        if kind == "custom":
+            shocks.append({"custom_variable": name, "magnitude": mag, "duration": dur})
+        else:
+            shocks.append({"key": name, "magnitude": mag, "duration": dur})
     res = run_optimal_control(
         shocks=shocks, weights=dict(weights), expectations=expectations,
         start=start, horizon=horizon,
@@ -59,7 +68,15 @@ st.caption(
     "response — linear-quadratic method, in the spirit of the FEDS Note."
 )
 
-_DEMAND = [k for k, s in CATALOGUE.items() if s.group in ("Demand", "Prices & supply")]
+# Shocks to stabilise: the full multi-instrument set shared with the Shock
+# Analysis tab, EXCEPT the monetary lever — the funds rate is the control
+# variable here, so a shock to the policy rule is inert / incoherent (and any
+# named scenario that uses it is dropped from the loader automatically).
+_OCP_GROUP_ORDER = [
+    "Demand", "Prices & supply", "Financial", "External / global", "Fiscal & monetary",
+]
+_OCP_EXCLUDE = {"monetary"}
+_OCP_OPTIONS, _ocp_label = sc.shock_options(_OCP_GROUP_ORDER, exclude_keys=_OCP_EXCLUDE)
 
 # Loss-weight presets from the literature: (inflation, unemployment, smoothing).
 _PRESETS = {
@@ -71,34 +88,30 @@ _PRESETS = {
 }
 _DEFAULT_PRESET = "Balanced dual mandate (Fed / Yellen 2012)"
 
-# --- Row 1: the shock to stabilise ---
-_r1 = st.columns([2, 1, 1])
-shock_key = _r1[0].selectbox(
-    "Shock to stabilise", options=_DEMAND,
-    index=_DEMAND.index("consumption") if "consumption" in _DEMAND else 0,
-    format_func=lambda k: CATALOGUE[k].label,
-    help="The disturbance the policymaker faces.",
-)
-spec = CATALOGUE[shock_key]
-default_sign = -1.0 if shock_key in ("consumption", "durables", "housing", "business_investment") else 1.0
-magnitude = _r1[1].number_input(
-    f"Magnitude ({spec.user_unit})", value=float(spec.default_magnitude) * default_sign,
-    step=abs(float(spec.default_magnitude)) / 4 or 0.1,
-    help="Negative demand shocks create a recession (the classic OCP case).",
-)
-duration = _r1[2].number_input(
-    "Duration (q)", min_value=1, max_value=12, value=int(spec.default_duration), step=1,
-)
+# --- Scenario loader (same presets as Shock Analysis, minus rate-rule ones) ---
+sc.render_scenario_loader("ocp", exclude_keys=_OCP_EXCLUDE)
 
-# --- Row 2: preset + settings ---
+# --- Settings row: shocks count | expectations | horizon | loss-weight preset ---
 # Seed the weight sliders' state once, then let a newly-chosen preset update them.
 for _k, _v in (("ocp_wpi", 1.0), ("ocp_wu", 1.0), ("ocp_wsm", 0.5)):
     st.session_state.setdefault(_k, _v)
+st.session_state.setdefault("ocp_nsh", 1)
 
-_r2 = st.columns([2, 1, 1])
-preset = _r2[0].selectbox(
-    "Loss-weight preset", ["Custom"] + list(_PRESETS),
-    index=1 + list(_PRESETS).index(_DEFAULT_PRESET),
+_s = st.columns(4)
+n_shocks = _s[0].selectbox(
+    "Number of shocks", [1, 2, 3, 4], key="ocp_nsh",
+    help="The disturbance the policymaker faces — several levers combine into one.",
+)
+expectations = _s[1].selectbox(
+    "Expectations", options=["var", "mce"], key="ocp_exp",
+    format_func=lambda k: {"var": "VAR (fast)", "mce": "Model-consistent (slow)"}[k],
+    help="VAR is the fast default (Toeplitz impulse responses). MCE builds the "
+    "full anticipation matrix — one solve per quarter, a couple of minutes.",
+)
+horizon = _s[2].selectbox("Horizon (q)", [8, 9, 10, 11, 12], index=4, key="ocp_h")
+st.session_state.setdefault("ocp_lwpreset", _DEFAULT_PRESET)
+preset = _s[3].selectbox(
+    "Loss-weight preset", ["Custom"] + list(_PRESETS), key="ocp_lwpreset",
     help="Named weightings spanning the mainstream range — see 'How to choose "
     "the weights' below. Pick one, then fine-tune the sliders if you like.",
 )
@@ -108,13 +121,10 @@ if preset != "Custom" and st.session_state.get("_ocp_preset") != preset:
      st.session_state["ocp_wsm"]) = _PRESETS[preset]
 st.session_state["_ocp_preset"] = preset
 
-expectations = _r2[1].selectbox(
-    "Expectations", options=["var", "mce"],
-    format_func=lambda k: {"var": "VAR (fast)", "mce": "Model-consistent (slow)"}[k],
-)
-horizon = _r2[2].selectbox("Horizon (q)", [8, 9, 10, 11, 12], index=4)
+# --- Editable per-shock rows (the disturbance to stabilise) ---
+shock_specs = sc.render_shock_rows("ocp", n_shocks, _OCP_OPTIONS, _ocp_label)
 
-# --- Row 3: the three loss weights (driven by the preset, editable) ---
+# --- The three loss weights (driven by the preset, editable) ---
 _r3 = st.columns(3)
 w_pi = _r3[0].slider("Inflation-gap weight", 0.0, 3.0, step=0.1, key="ocp_wpi")
 w_u = _r3[1].slider("Unemployment-gap weight", 0.0, 3.0, step=0.1, key="ocp_wu")
@@ -123,7 +133,11 @@ w_sm = _r3[2].slider("Rate-smoothing weight", 0.0, 2.0, step=0.1, key="ocp_wsm",
 
 if expectations == "mce":
     st.caption("⏳ MCE builds the full anticipation matrix — one solve per quarter, a couple of minutes.")
-st.caption(f"↳ {spec.description}")
+st.caption(
+    "The classic OCP case is a **contractionary** disturbance (a recession the "
+    "Fed leans against) — flip a magnitude's sign, or load a downside scenario, "
+    "for that. A shock to the funds-rate rule itself is excluded here."
+)
 
 with st.expander("How to choose the weights"):
     st.markdown(
@@ -154,22 +168,31 @@ st.divider()
 
 
 if run:
+    if not shock_specs:
+        st.warning("Add at least one shock to stabilise.")
+        st.stop()
     with st.spinner("Building impulse responses and optimising the funds-rate path…"):
         try:
             out = _cached_ocp(
-                ((shock_key, float(magnitude), int(duration)),),
+                tuple(shock_specs),
                 (("inflation", w_pi), ("unemployment", w_u), ("smoothing", w_sm)),
-                expectations, start := "2026Q3", int(horizon),
+                expectations, "2026Q3", int(horizon),
             )
         except Exception as exc:  # noqa: BLE001
             st.error(f"Optimisation failed: {type(exc).__name__}: {exc}")
             st.stop()
     st.session_state["ocp"] = out
+    st.session_state["ocp_meta"] = {
+        "expectations": expectations,
+        "stem": (shock_specs[0][1].replace(":", "_")
+                 if len(shock_specs) == 1 else f"{len(shock_specs)}shocks"),
+    }
 
 out = st.session_state.get("ocp")
 if out is None:
-    st.info("Pick a shock and loss weights above, then press **Optimise policy**.")
+    st.info("Configure the shock(s) and loss weights above, then press **Optimise policy**.")
     st.stop()
+_ocp_meta = st.session_state.get("ocp_meta", {"expectations": "var", "stem": "shock"})
 
 paths = out["paths"]
 x = [pd.Period(q, freq="Q").to_timestamp() for q in out["window"]]
@@ -211,7 +234,7 @@ st.caption(
 st.download_button(
     "⬇ Paths (CSV)",
     data=paths.assign(quarter=out["window"]).to_csv(index=False).encode("utf-8"),
-    file_name=f"frbus_optimal_control_{shock_key}_{expectations}.csv",
+    file_name=f"frbus_optimal_control_{_ocp_meta['stem']}_{_ocp_meta['expectations']}.csv",
     mime="text/csv",
 )
 

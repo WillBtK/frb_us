@@ -23,7 +23,7 @@ baseline) side by side.
   mortgage rate), **External / global** (real exchange rate, global growth /
   foreign output gap, global long-term rates, foreign inflation), and **Fiscal &
   monetary** (tax rate, policy-rule shock) — plus an advanced raw-variable option.
-  **Up to three shocks can be applied together** (e.g. an oil-price spike *and* a
+  **Up to four shocks can be applied together** (e.g. an oil-price spike *and* a
   fiscal expansion), and a library of **named composite scenarios** — spanning
   upside and downside regimes (soft landing, fiscal reflation, global growth
   scare, global inflation surprise, long-end selloff, housing-led downturn,
@@ -53,7 +53,11 @@ baseline) side by side.
 - **Optimal-Control page** (a third tab): the funds-rate path that minimises a
   quadratic loss over the inflation and unemployment gaps (with adjustable
   weights), vs. the Taylor rule and no response — solved by the linear-quadratic
-  method, in the spirit of the FEDS Note on optimal-control policy.
+  method, in the spirit of the FEDS Note on optimal-control policy. It takes the
+  **same multi-shock disturbances and named scenarios** as the Shock Analysis tab
+  (minus the funds-rate-rule shock, which is the control variable here). The
+  optimisation is always linear-quadratic; the impulse responses default to the
+  fast **VAR** solve, with model-consistent (MCE) anticipation as a slower opt-in.
 
 ## Vintages
 
@@ -108,7 +112,8 @@ app/streamlit_app.py         Streamlit entry point — navigation router (deploy
 app/views/                   The three tabs (via st.navigation)
   ├─ shock_analysis.py       Shock Analysis
   ├─ fiscal_multipliers.py   Fiscal Multipliers
-  └─ optimal_control.py      Optimal Control
+  ├─ optimal_control.py      Optimal Control
+  └─ _shock_controls.py      Shared multi-shock UI (loader + rows), used by two tabs
 src/frbus_shock/             Simulation library wrapping PyFRB/US
   ├─ shocks.py               Shock library (levers, units, defaults, groups)
   ├─ policy.py               Active rule vs. funds-rate-held mechanism

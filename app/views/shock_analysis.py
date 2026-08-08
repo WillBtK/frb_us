@@ -24,6 +24,9 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SRC = _REPO_ROOT / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
+_VIEWS = Path(__file__).resolve().parent
+if str(_VIEWS) not in sys.path:
+    sys.path.insert(0, str(_VIEWS))
 
 import matplotlib
 
@@ -34,14 +37,13 @@ import plotly.graph_objects as go  # noqa: E402
 import streamlit as st  # noqa: E402
 from plotly.subplots import make_subplots  # noqa: E402
 
+import _shock_controls as sc  # noqa: E402
 from frbus_shock import (  # noqa: E402
-    CATALOGUE,
     DEFAULT_OUTPUTS,
     MODEL_VINTAGE,
     OUTPUT_BY_KEY,
     OUTPUT_CATALOGUE,
     OUTPUT_GROUPS,
-    SCENARIO_PRESETS,
     data_vintage,
     deviations,
     expectations_choices,
@@ -176,16 +178,7 @@ st.caption(
 _SHOCK_GROUP_ORDER = [
     "Demand", "Prices & supply", "Financial", "External / global", "Fiscal & monetary",
 ]
-_SHOCK_KEYS = [k for g in _SHOCK_GROUP_ORDER for k, s in CATALOGUE.items() if s.group == g]
-_SHOCK_KEYS += [k for k in CATALOGUE if k not in _SHOCK_KEYS]  # any stragglers
-_SHOCK_OPTIONS = _SHOCK_KEYS + ["__custom__"]
-
-
-def _shock_option_label(k):
-    if k == "__custom__":
-        return "Advanced — raw FRB/US variable…"
-    s = CATALOGUE[k]
-    return f"{s.group} · {s.label}"
+_SHOCK_OPTIONS, _shock_option_label = sc.shock_options(_SHOCK_GROUP_ORDER)
 
 
 def _start_quarter_options():
@@ -217,33 +210,13 @@ def _fmt_start(s):
 _exp_choices = expectations_choices()
 
 # --- Scenario presets — load a named multi-shock scenario into the controls ---
-def _apply_scenario(name: str) -> None:
-    """Write a scenario's shocks into the shock-widget state, then rerun."""
-    shocks = SCENARIO_PRESETS[name]["shocks"]
-    st.session_state["n_shocks_sel"] = len(shocks)
-    for i, s in enumerate(shocks):
-        st.session_state[f"shk_type_{i}"] = s["key"]
-        st.session_state[f"shk_mag_{i}"] = float(s["magnitude"])
-        st.session_state[f"shk_dur_{i}"] = int(s["duration"])
-    st.rerun()
-
-
-_scn = st.columns([3, 1])
-_scn_name = _scn[0].selectbox(
-    "Load a scenario (optional)", ["—"] + list(SCENARIO_PRESETS),
-    help="Named multi-shock scenarios a cross-asset strategist reasons in. Load "
-    "one to populate the controls below, then edit freely before running.",
-)
-if _scn_name != "—":
-    _scn[0].caption(f"↳ {SCENARIO_PRESETS[_scn_name]['blurb']}")
-if _scn[1].button("Load scenario", disabled=_scn_name == "—", use_container_width=True):
-    _apply_scenario(_scn_name)
+sc.render_scenario_loader("shk")
 
 # --- Global settings (one horizontal row of dropdowns) ---
-st.session_state.setdefault("n_shocks_sel", 1)
+st.session_state.setdefault("shk_nsh", 1)
 _g = st.columns(4)
 n_shocks = _g[0].selectbox(
-    "Number of shocks", [1, 2, 3], key="n_shocks_sel",
+    "Number of shocks", [1, 2, 3, 4], key="shk_nsh",
     help="Apply several shocks at once — their effects combine in one run.",
 )
 expectations = _g[1].selectbox(
@@ -262,40 +235,7 @@ if expectations == "mce":
     st.caption("⏳ Model-consistent expectations solve over a longer horizon — slower.")
 
 # --- One horizontal row per shock: type | magnitude | duration ---
-# Widget state is seeded once (not passed as a default each run) so that loading
-# a scenario can write these keys without tripping Streamlit's default-vs-state
-# warning.
-shock_specs = []  # (kind, name, magnitude, duration)
-for i in range(int(n_shocks)):
-    _c = st.columns([3, 1, 1])
-    st.session_state.setdefault(f"shk_type_{i}", _SHOCK_OPTIONS[min(i, len(_SHOCK_OPTIONS) - 2)])
-    key = _c[0].selectbox(
-        f"Shock {i + 1}" if n_shocks > 1 else "Shock",
-        options=_SHOCK_OPTIONS, format_func=_shock_option_label, key=f"shk_type_{i}",
-    )
-    if key == "__custom__":
-        name = _c[0].text_input(
-            "FRB/US variable", value="eco", key=f"shk_var_{i}",
-            help="Shocks <variable>_aerr in native model units — for power users.",
-        )
-        dmag, ddur, unit, kind = 0.01, 4, "native units", "custom"
-    else:
-        _spec = CATALOGUE[key]
-        dmag, ddur, unit, kind = (
-            _spec.default_magnitude, _spec.default_duration, _spec.user_unit, "catalogue",
-        )
-        name = key
-    st.session_state.setdefault(f"shk_mag_{i}", float(dmag))
-    st.session_state.setdefault(f"shk_dur_{i}", int(ddur))
-    mag = _c[1].number_input(
-        f"Magnitude ({unit})", step=abs(float(dmag)) / 4 or 0.1, key=f"shk_mag_{i}",
-    )
-    dur = _c[2].number_input(
-        "Duration (q)", min_value=1, max_value=20, step=1, key=f"shk_dur_{i}",
-    )
-    shock_specs.append((kind, name, float(mag), int(dur)))
-    if key != "__custom__":
-        st.caption(f"↳ {CATALOGUE[key].description}")
+shock_specs = sc.render_shock_rows("shk", n_shocks, _SHOCK_OPTIONS, _shock_option_label)
 
 # --- Output variables (collapsed; grouped multiselects, 3 per row) ---
 with st.expander(

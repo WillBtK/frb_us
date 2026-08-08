@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from frbus_shock import run_optimal_control
+import pytest
+
+from frbus_shock import SCENARIO_PRESETS, run_optimal_control
 
 
 def test_optimal_beats_taylor_beats_held():
@@ -55,3 +57,35 @@ def test_higher_unemployment_weight_stabilises_unemployment_more():
     # deeper trough in the funds-rate path (more aggressive easing at the bottom).
     assert heavy_u.paths["optimal_u"].abs().max() < base.paths["optimal_u"].abs().max()
     assert heavy_u.delta.min() < base.delta.min()
+
+
+# Multi-shock scenarios the OCP tab now accepts — every one except those using
+# the funds-rate rule itself (the control variable), which the tab filters out.
+_OCP_SCENARIOS = [
+    name for name, p in SCENARIO_PRESETS.items()
+    if all(s["key"] != "monetary" for s in p["shocks"])
+]
+
+
+@pytest.mark.parametrize("name", _OCP_SCENARIOS)
+def test_multishock_scenario_optimal_is_the_minimum(name):
+    """Optimal control minimises the loss for every OCP-eligible scenario.
+
+    The optimum must weakly beat both the Taylor rule and no response; the
+    Taylor-vs-held ordering is *not* guaranteed (for supply shocks, an aggressive
+    rule can underperform inaction under a balanced mandate).
+    """
+    res = run_optimal_control(
+        shocks=SCENARIO_PRESETS[name]["shocks"], expectations="var",
+        start="2026Q3", horizon=12,
+    )
+    L = res.losses
+    assert L["optimal"] <= L["taylor"] + 1e-9
+    assert L["optimal"] <= L["held"] + 1e-9
+
+
+def test_monetary_scenario_excluded_from_ocp():
+    """'Hawkish Fed surprise' uses the rate rule, so it's not an OCP scenario."""
+    hawkish = SCENARIO_PRESETS["Hawkish Fed surprise"]
+    assert any(s["key"] == "monetary" for s in hawkish["shocks"])
+    assert "Hawkish Fed surprise" not in _OCP_SCENARIOS
