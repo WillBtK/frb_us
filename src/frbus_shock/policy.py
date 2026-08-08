@@ -83,12 +83,60 @@ ACTIVE_RULES: Dict[str, Tuple[str, str, str]] = {
 DEFAULT_RULE = "inertial"
 
 
+# Selectable *fiscal* closure rules — how the government stabilises the budget and
+# debt. Each sets FRB/US's fiscal-policy switches (dfpsrp / dfpdbt / dfpex). This is
+# the core lever for debt-sustainability analysis: it decides whether, and how,
+# debt returns to its baseline path after a shock. Values: (switch settings, label,
+# tooltip). Order is the dropdown order.
+FISCAL_RULES: Dict[str, Tuple[Dict[str, int], str, str]] = {
+    "surplus_ratio": (
+        {"dfpsrp": 1, "dfpdbt": 0, "dfpex": 0}, "Surplus-ratio targeting",
+        "FRB/US's default. The personal tax rate adjusts to steer the budget surplus "
+        "toward a target share of GDP, so debt is stabilised indirectly. A moderate, "
+        "gradual stabiliser.",
+    ),
+    "debt_stabilization": (
+        {"dfpsrp": 0, "dfpdbt": 1, "dfpex": 0}, "Debt-ratio stabilisation",
+        "Taxes adjust to hold the federal debt-to-GDP ratio on its baseline path — the "
+        "government leans directly against debt. The strongest stabiliser: debt/GDP is "
+        "pulled back (and can briefly overshoot) as taxes rise.",
+    ),
+    "exogenous_taxes": (
+        {"dfpsrp": 0, "dfpdbt": 0, "dfpex": 1}, "No stabilisation (exogenous taxes)",
+        "Tax rates follow their exogenous trend and do NOT respond to the budget or the "
+        "debt. A deficit shock then accumulates — debt/GDP can drift up without "
+        "returning. The 'is this path sustainable?' benchmark.",
+    ),
+}
+DEFAULT_FISCAL_RULE = "surplus_ratio"
+
+
 def apply_active_rule(data: pd.DataFrame, start: pd.Period, end: pd.Period) -> pd.DataFrame:
     """Return ``data`` unchanged — the baseline already runs the inertial rule.
 
     Present for symmetry/readability at the call site (the ``inertial`` default).
     """
     return data
+
+
+def set_fiscal_rule(
+    data: pd.DataFrame, rule_key: str, start: pd.Period, end: pd.Period
+) -> pd.DataFrame:
+    """Return ``data`` with the fiscal-policy switches set to the named closure rule.
+
+    Selects one of :data:`FISCAL_RULES` by writing its ``dfp*`` switches over the
+    window. The caller then ``init_trac``\\ s under this configuration so the rule
+    reproduces the baseline exactly before the shock is applied.
+    """
+    if rule_key not in FISCAL_RULES:
+        raise KeyError(
+            f"unknown fiscal rule '{rule_key}'; choose one of {list(FISCAL_RULES)}"
+        )
+    out = data.copy()
+    for switch, value in FISCAL_RULES[rule_key][0].items():
+        if switch in out.columns:
+            out.loc[start:end, switch] = value
+    return out
 
 
 def set_active_rule(

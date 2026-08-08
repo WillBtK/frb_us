@@ -134,6 +134,15 @@ OUTPUT_CATALOGUE: List[OutputVar] = [
               "diff", derive=_share_of_gdp("fynin"), unit_override="pp of GDP"),
     # --- Government ---
     OutputVar("gfdbtn", "Federal debt (stock)", "Government", "pct"),
+    OutputVar("debt_gdp", "Federal debt held by public (% of GDP)", "Government",
+              "diff", derive=_share_of_gdp("gfdbtnp"), unit_override="pp of GDP"),
+    OutputVar("budget_gdp", "Federal budget balance (% of GDP)", "Government",
+              "diff", derive=_share_of_gdp("gfsrpn"), unit_override="pp of GDP"),
+    OutputVar("primary_gdp", "Primary balance (% of GDP)", "Government", "diff",
+              derive=lambda f: 100.0 * (f["gfsrpn"] + f["gfintn"]) / f["xgdpn"],
+              unit_override="pp of GDP"),
+    OutputVar("interest_gdp", "Net interest / debt service (% of GDP)", "Government",
+              "diff", derive=_share_of_gdp("gfintn"), unit_override="pp of GDP"),
 ]
 
 OUTPUT_BY_KEY: Dict[str, OutputVar] = {v.key: v for v in OUTPUT_CATALOGUE}

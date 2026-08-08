@@ -61,7 +61,8 @@ class SimResult:
     baseline: pd.DataFrame
     active: pd.DataFrame  # shock(s) + active policy rule (with response)
     held: pd.DataFrame  # shock(s) + funds rate held at baseline (without response)
-    policy_rule: str = "inertial"  # which rule the active scenario follows
+    policy_rule: str = "inertial"  # which monetary rule the active scenario follows
+    fiscal_rule: str = "surplus_ratio"  # which fiscal closure rule the run uses
 
     @property
     def window(self) -> pd.PeriodIndex:
@@ -86,15 +87,15 @@ class SimResult:
 
 
 def _fiscal_baseline_config(
-    data: pd.DataFrame, start: pd.Period, end: pd.Period, expectations: str
+    data: pd.DataFrame, start: pd.Period, end: pd.Period, expectations: str,
+    fiscal_rule: str = "surplus_ratio",
 ) -> pd.DataFrame:
-    """Apply the standard FRB/US baseline policy configuration.
+    """Apply the FRB/US fiscal-closure configuration for the chosen rule.
 
-    Matches the shipped demos: debt-stabilisation off, surplus-ratio targeting
-    on. Under MCE we also fix ``rstar`` (``drstar=0``), as in ``example2.py``.
+    Defaults to the shipped demos' setup (surplus-ratio targeting on). Under MCE we
+    also fix ``rstar`` (``drstar=0``), as in ``example2.py``.
     """
-    data.loc[start:end, "dfpdbt"] = 0
-    data.loc[start:end, "dfpsrp"] = 1
+    data = policy.set_fiscal_rule(data, fiscal_rule, start, end)
     if expectations == "mce" and "drstar" in data.columns:
         data.loc[start:end, "drstar"] = 0
     return data
@@ -121,6 +122,7 @@ def run_simulation(
     custom_label: Optional[str] = None,
     shocks: Optional[Sequence[dict]] = None,
     policy_rule: str = "inertial",
+    fiscal_rule: str = "surplus_ratio",
 ) -> SimResult:
     """Run a scenario twice — active rule and funds rate held — vs. baseline.
 
@@ -155,6 +157,10 @@ def run_simulation(
         raise ValueError(
             f"policy_rule must be one of {list(policy.ACTIVE_RULES)}, got '{policy_rule}'"
         )
+    if fiscal_rule not in policy.FISCAL_RULES:
+        raise ValueError(
+            f"fiscal_rule must be one of {list(policy.FISCAL_RULES)}, got '{fiscal_rule}'"
+        )
 
     requests = _resolve_requests(
         shocks, shock_key, magnitude, duration, custom_variable, custom_label
@@ -169,7 +175,7 @@ def run_simulation(
 
     # Baseline dataset + standard policy configuration.
     data = load_baseline()
-    data = _fiscal_baseline_config(data, start_p, solve_end, expectations)
+    data = _fiscal_baseline_config(data, start_p, solve_end, expectations, fiscal_rule)
 
     frbus = load_frbus(expectations)
 
@@ -209,6 +215,7 @@ def run_simulation(
         active=active.loc[sl].copy(),
         held=held.loc[sl].copy(),
         policy_rule=policy_rule,
+        fiscal_rule=fiscal_rule,
     )
 
 

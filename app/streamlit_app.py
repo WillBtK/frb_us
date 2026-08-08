@@ -1,8 +1,8 @@
 """FRB/US dashboard entry point — the navigation router.
 
 Streamlit Community Cloud deploys this file. It sets the page config once and
-routes to the three views under ``app/views/`` with friendly sidebar labels
-(Shock Analysis / Fiscal Multipliers / Optimal Control).
+routes to the four views under ``app/views/`` with friendly sidebar labels
+(Shock Analysis / Fiscal Multipliers / Optimal Control / Debt Sustainability).
 """
 
 from __future__ import annotations
@@ -24,6 +24,7 @@ pages = [
     st.Page("views/shock_analysis.py", title="Shock Analysis", icon="📈", default=True),
     st.Page("views/fiscal_multipliers.py", title="Fiscal Multipliers", icon="💵"),
     st.Page("views/optimal_control.py", title="Optimal Control", icon="🎯"),
+    st.Page("views/debt_sustainability.py", title="Debt Sustainability", icon="🏛️"),
 ]
 
 st.navigation(pages).run()

@@ -54,7 +54,15 @@ from .optcontrol import (
     OCPResult,
     run_optimal_control,
 )
-from .policy import ACTIVE_RULES, DEFAULT_RULE
+from .debt import (
+    DEBT_LABELS,
+    DEBT_OUTPUT_KEYS,
+    DEBT_OUTPUTS,
+    DEBT_UNITS,
+    DebtResult,
+    run_debt_comparison,
+)
+from .policy import ACTIVE_RULES, DEFAULT_FISCAL_RULE, DEFAULT_RULE, FISCAL_RULES
 from .shocks import (
     CATALOGUE,
     SCENARIO_PRESETS,
@@ -79,6 +87,14 @@ __all__ = [
     "SCENARIO_PRESETS",
     "ACTIVE_RULES",
     "DEFAULT_RULE",
+    "FISCAL_RULES",
+    "DEFAULT_FISCAL_RULE",
+    "run_debt_comparison",
+    "DebtResult",
+    "DEBT_OUTPUTS",
+    "DEBT_OUTPUT_KEYS",
+    "DEBT_LABELS",
+    "DEBT_UNITS",
     "ShockSpec",
     "ShockRequest",
     "get_shock",

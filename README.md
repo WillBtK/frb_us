@@ -66,6 +66,15 @@ baseline) side by side.
   disturbances and named scenarios** as the Shock Analysis tab (minus the
   funds-rate-rule shock, which is the control variable here). VAR is the fast
   default; model-consistent (MCE) anticipation is a slower opt-in.
+- **Debt-Sustainability page** (a fourth tab): runs a fiscal shock under each of
+  FRB/US's **fiscal closure rules** — surplus-ratio targeting, debt-ratio
+  stabilisation, or no stabilisation (exogenous taxes) — over a long horizon
+  (up to 20 years), and charts the resulting **debt/GDP, primary balance, budget
+  balance, net-interest/debt-service, and r − g** paths side by side. The contrast
+  between a stabilising rule (debt/GDP returns to baseline) and a non-stabilising
+  one (debt/GDP drifts up) is the debt-sustainability question. VAR-only.
+  (Sovereign risk is not endogenous — add the term-premium lever to represent a
+  market repricing of debt.)
 
 ## Vintages
 
@@ -117,19 +126,21 @@ switches rather than a hack (full detail in `src/frbus_shock/policy.py`):
 
 ```
 app/streamlit_app.py         Streamlit entry point — navigation router (deploy this)
-app/views/                   The three tabs (via st.navigation)
+app/views/                   The four tabs (via st.navigation)
   ├─ shock_analysis.py       Shock Analysis
   ├─ fiscal_multipliers.py   Fiscal Multipliers
   ├─ optimal_control.py      Optimal Control
-  └─ _shock_controls.py      Shared multi-shock UI (loader + rows), used by two tabs
+  ├─ debt_sustainability.py  Debt Sustainability
+  └─ _shock_controls.py      Shared multi-shock UI (loader + rows), used by three tabs
 src/frbus_shock/             Simulation library wrapping PyFRB/US
   ├─ shocks.py               Shock library (levers, units, defaults, groups)
-  ├─ policy.py               Active rule vs. funds-rate-held mechanism
+  ├─ policy.py               Monetary rules + fiscal closure rules + funds-rate hold
   ├─ model.py                Cached model + baseline loading, vintages
   ├─ simulate.py             run_simulation(): baseline + 2 scenarios, multi-shock
   ├─ outputs.py              Deviation panels, summary table, CSV/chart export
   ├─ multipliers.py          Fiscal output multipliers
-  └─ optcontrol.py           Linear-quadratic optimal control
+  ├─ optcontrol.py           Linear-quadratic optimal control
+  └─ debt.py                 Debt-sustainability: shock under each fiscal closure rule
 third_party/pyfrbus/         Vendored, patched PyFRB/US (public domain)
   ├─ pyfrbus/                Model platform code (3 compat patches)
   ├─ models/model.xml        FRB/US equations
