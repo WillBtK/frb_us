@@ -30,9 +30,11 @@ baseline) side by side.
 - **Outputs:** a grouped, selectable menu (defaulting to GDP growth, unemployment,
   PCE inflation, and the funds rate). Add **Activity** (output gap; real GDP,
   consumption, investment as % deviations), **Inflation** (core PCE, CPI/core CPI,
-  4-quarter measures), and **Interest rates** (real funds rate; 5y/10y/30y
-  Treasury, BBB corporate, 10y term premium). Rates/inflation are shown in
-  percentage points, levels as percent deviations from baseline.
+  4-quarter measures), **Interest rates** (real funds rate; 5y/10y/30y
+  Treasury, BBB corporate, 10y term premium), and **Financial & external** (real
+  expected equity return, equity risk premium, real exchange rate, house prices).
+  Rates/inflation are shown in percentage points, levels as percent deviations
+  from baseline.
 - **Export:** download any run as CSV (deviation panel) or PNG/HTML chart, since
   each run is computationally non-trivial.
 - **Fiscal Multipliers page** (a second tab): output multipliers (ΔGDP per $ of

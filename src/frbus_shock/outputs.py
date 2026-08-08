@@ -75,6 +75,8 @@ OUTPUT_CATALOGUE: List[OutputVar] = [
     OutputVar("rme", "Mortgage rate (30-year)", "Interest rates", "diff"),
     OutputVar("rcar", "New-car loan rate", "Interest rates", "diff"),
     # --- Financial & external ---
+    OutputVar("req", "Real equity return (expected)", "Financial & external", "diff"),
+    OutputVar("reqp", "Equity risk premium", "Financial & external", "diff"),
     OutputVar("fpxr", "Real exchange rate (broad; up = stronger $)", "Financial & external", "pct"),
     OutputVar("phouse", "House prices", "Financial & external", "pct"),
     # --- Government ---
