@@ -105,3 +105,29 @@ def test_debt_scenario_consolidation_lowers_debt():
     r = run_debt_scenario(deficit_pct=-2.0, deficit_years=5,
                           fiscal_rules=["exogenous_taxes"], start="2026Q3", horizon=40)
     assert r.levels("exogenous_taxes")["debt_gdp"].iloc[-1] < r.baseline_levels["debt_gdp"].iloc[-1]
+
+
+def test_debt_scenario_sources_and_permanent():
+    """Each deficit source raises debt; a permanent shock leaves debt higher than a
+    temporary one of the same size."""
+    from frbus_shock import DEBT_SOURCES, run_debt_scenario
+
+    for src in DEBT_SOURCES:
+        r = run_debt_scenario(deficit_pct=2.0, deficit_years=5, source=src,
+                              fiscal_rules=["exogenous_taxes"], start="2026Q3", horizon=40)
+        end = r.levels("exogenous_taxes")["debt_gdp"].iloc[-1]
+        assert end > r.baseline_levels["debt_gdp"].iloc[-1]
+
+    temp = run_debt_scenario(2.0, 5, source="fed_purchases", fiscal_rules=["exogenous_taxes"],
+                             horizon=60)
+    perm = run_debt_scenario(2.0, 5, source="fed_purchases", fiscal_rules=["exogenous_taxes"],
+                             horizon=60, permanent=True)
+    assert (perm.levels("exogenous_taxes")["debt_gdp"].iloc[-1]
+            > temp.levels("exogenous_taxes")["debt_gdp"].iloc[-1])
+
+
+def test_unknown_source_rejected():
+    from frbus_shock import run_debt_scenario
+
+    with pytest.raises(ValueError):
+        run_debt_scenario(2.0, 5, source="not_a_source")

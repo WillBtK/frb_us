@@ -167,14 +167,39 @@ def run_debt_comparison(
 # --------------------------------------------------------------------------- #
 # Clean deficit-shock scenario (intuitive % of GDP input)                     #
 # --------------------------------------------------------------------------- #
-def _solve_debt_shock(frbus, start_p, disp_end, adds, baseline, gtrd_path,
+# Deficit *sources* the debt tab exposes. Each is a federal fiscal flow expressed
+# as a share of GDP by exogenising its level: spending (real, over real GDP) or a
+# tax cut (nominal receipts, over nominal GDP). ``sign`` is +1 when a positive
+# shock widens the deficit through spending, −1 for a tax cut (receipts fall).
+# Personal taxes and S&L purchases are deliberately absent — see the tab's notes:
+# the debt-response rules act *through* personal taxes, and S&L spending doesn't
+# touch the federal budget.
+# key -> (exogenised variable, GDP denominator, sign, label)
+DEBT_SOURCES: Dict[str, Tuple[str, str, float, str]] = {
+    "fed_purchases": ("egfe", "xgdp", +1.0, "Federal purchases (spending ↑)"),
+    "transfers": ("gtr", "xgdp", +1.0, "Federal transfers (spending ↑)"),
+    "corporate_tax_cut": ("tcin", "xgdpn", -1.0, "Corporate tax cut (receipts ↓)"),
+}
+DEFAULT_SOURCE = "fed_purchases"
+
+
+def _debt_level(frame, window):
+    return (100.0 * frame.loc[window, "gfdbtnp"] / frame.loc[window, "xgdpn"]).to_numpy()
+
+
+def _primary_deficit_level(frame, window):
+    num = frame.loc[window, "gfsrpn"] + frame.loc[window, "gfintn"]
+    return (-100.0 * num / frame.loc[window, "xgdpn"]).to_numpy()
+
+
+def _solve_debt_shock(frbus, start_p, disp_end, adds, baseline, exog_var, exog_path,
                       beta_debt, beta_deficit, max_iter=6, tol=0.03, blowup=1000.0):
-    """Solve with transfers (``gtrd``) exogenised at ``gtrd_path`` (the fiscal shock),
+    """Solve with ``exog_var`` exogenised at ``exog_path`` (the fiscal shock),
     optionally iterating the sovereign-risk term-premium feedback to a fixed point.
     Returns ``(sim, converged)``."""
     window = pd.period_range(start_p, disp_end, freq="Q")
     use_fb = beta_debt > 0 or beta_deficit > 0
-    exog = ["gtrd", "rg10p"] if use_fb else ["gtrd"]
+    exog = [exog_var, "rg10p"] if use_fb else [exog_var]
     base_debt = _debt_level(baseline, window)
     base_def = _primary_deficit_level(baseline, window)
     base_tp = adds.loc[window, "rg10p"].to_numpy()
@@ -187,7 +212,7 @@ def _solve_debt_shock(frbus, start_p, disp_end, adds, baseline, gtrd_path,
         sim = None
         for _it in range(1, (max_iter if use_fb else 1) + 1):
             data = adds.copy()
-            data.loc[start_p:disp_end, "gtrd"] = gtrd_path
+            data.loc[start_p:disp_end, exog_var] = exog_path
             if use_fb:
                 data.loc[start_p:disp_end, "rg10p"] = base_tp + add
             sim = _solve_robust(frbus, start_p, disp_end, data)
@@ -208,15 +233,6 @@ def _solve_debt_shock(frbus, start_p, disp_end, adds, baseline, gtrd_path,
         frbus.exogenize([])
 
 
-def _debt_level(frame, window):
-    return (100.0 * frame.loc[window, "gfdbtnp"] / frame.loc[window, "xgdpn"]).to_numpy()
-
-
-def _primary_deficit_level(frame, window):
-    num = frame.loc[window, "gfsrpn"] + frame.loc[window, "gfintn"]
-    return (-100.0 * num / frame.loc[window, "xgdpn"]).to_numpy()
-
-
 def run_debt_scenario(
     deficit_pct: float,
     deficit_years: int,
@@ -225,28 +241,34 @@ def run_debt_scenario(
     start: str = "2026Q3",
     horizon: int = DEFAULT_HORIZON,
     feedback: Tuple[float, float] = (0.0, 0.0),
+    source: str = DEFAULT_SOURCE,
+    permanent: bool = False,
 ) -> DebtResult:
     """Debt paths from a **sustained deficit shock of ``deficit_pct`` % of GDP**.
 
-    The shock is a rise in federal transfers held for ``deficit_years`` years,
-    implemented by exogenising ``gtrd`` (the transfers/GDP gap) so the impulse is an
-    intuitive, near-exact share of GDP — not a hard-to-read add-factor magnitude. It
-    is run under each fiscal closure rule (which sets how *taxes* respond), with the
-    optional sovereign-risk feedback.
+    ``source`` (see :data:`DEBT_SOURCES`) is the federal fiscal lever — a spending
+    rise or a corporate tax cut — exogenised so the impulse is a near-exact share of
+    GDP. It is held for ``deficit_years`` years, or for the whole horizon when
+    ``permanent`` is true (a lasting policy change, not a temporary pulse). The run
+    is repeated under each fiscal closure rule (which sets how *taxes* respond), with
+    the optional sovereign-risk feedback.
     """
     if horizon < 1 or deficit_years < 1:
         raise ValueError("horizon and deficit_years must be at least 1")
     if policy_rule not in policy.ACTIVE_RULES:
         raise ValueError(f"unknown policy_rule '{policy_rule}'")
+    if source not in DEBT_SOURCES:
+        raise ValueError(f"unknown source '{source}'; choose one of {list(DEBT_SOURCES)}")
     rules = [r for r in fiscal_rules if r in policy.FISCAL_RULES]
     if not rules:
         raise ValueError("no valid fiscal_rules given")
 
     beta_debt, beta_deficit = feedback
+    exog_var, denom, sign, _label = DEBT_SOURCES[source]
     start_p = pd.Period(start, freq="Q")
     disp_end = start_p + (horizon - 1)
     window = pd.period_range(start_p, disp_end, freq="Q")
-    n_shock = min(deficit_years * 4, horizon)
+    n_shock = horizon if permanent else min(deficit_years * 4, horizon)
 
     # Baseline levels — from the shared (never-exogenised) cached model.
     base_data = _fiscal_baseline_config(
@@ -268,12 +290,14 @@ def run_debt_scenario(
         if policy_rule != policy.DEFAULT_RULE:
             data = policy.set_active_rule(data, policy_rule, start_p, disp_end)
         adds = frbus.init_trac(start_p, disp_end, data)
-        # Transfers path: baseline + deficit_pct (% of GDP) for the shock years.
-        gtrd_path = adds.loc[start_p:disp_end, "gtrd"].copy()
-        gtrd_path.iloc[:n_shock] = gtrd_path.iloc[:n_shock].values + deficit_pct / 100.0
+        # Fiscal-flow path: baseline + sign · deficit_pct % of GDP for the shock span,
+        # via the source's own level variable (scaled by its GDP denominator).
+        exog_path = adds.loc[start_p:disp_end, exog_var].copy()
+        bump = sign * (deficit_pct / 100.0) * adds.loc[start_p:disp_end, denom].values
+        exog_path.iloc[:n_shock] = exog_path.iloc[:n_shock].values + bump[:n_shock]
 
         sim, conv = _solve_debt_shock(
-            frbus, start_p, disp_end, adds, baseline, gtrd_path.values,
+            frbus, start_p, disp_end, adds, baseline, exog_var, exog_path.values,
             beta_debt, beta_deficit,
         )
         converged[rule] = conv

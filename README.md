@@ -50,9 +50,10 @@ baseline) side by side.
 - **Export:** download any run as CSV (deviation panel) or PNG/HTML chart, since
   each run is computationally non-trivial.
 - **Fiscal Multipliers page** (a second tab): output multipliers (ΔGDP per $ of
-  fiscal impulse) for federal & state/local purchases, transfers, and a personal
-  tax cut, with the active rule vs. an accommodative (funds-rate-held) response —
-  in the spirit of CBO's fiscal-multiplier work.
+  fiscal impulse) for the five FRB/US fiscal instruments — federal & state/local
+  purchases, federal transfers, a personal tax cut, and a corporate tax cut — with
+  the active rule vs. an accommodative (funds-rate-held) response, in the spirit of
+  CBO's fiscal-multiplier work.
 - **Optimal-Control page** (a third tab): the funds-rate path that minimises a
   quadratic loss over the inflation and unemployment gaps (with adjustable
   weights) — always shown, and benchmarked against **any two policy rules you
@@ -67,9 +68,10 @@ baseline) side by side.
   funds-rate-rule shock, which is the control variable here). VAR is the fast
   default; model-consistent (MCE) anticipation is a slower opt-in.
 - **Debt-Sustainability page** (a fourth tab): you set a **deficit shock as a share
-  of GDP** (how much bigger the deficit gets, and for how many years — implemented
-  cleanly by pinning the transfers/GDP path), and the tab charts the **actual
-  federal debt/GDP level** (anchored to the Fed's projection, not just a deviation)
+  of GDP** — choosing the federal **source** (federal purchases, federal transfers,
+  or a corporate tax cut), the size, and whether it is temporary or **permanent** —
+  implemented cleanly by exogenising that lever's level, and the tab charts the
+  **actual federal debt/GDP level** (anchored to the Fed's projection, not just a deviation)
   under three plain-language fiscal responses — **no fiscal response
   (deficit-financed)**, **gradual correction (surplus target)**, or **active
   stabilisation (debt target)** — plus the primary balance, budget balance,

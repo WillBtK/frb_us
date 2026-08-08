@@ -35,6 +35,7 @@ import _shock_controls as sc  # noqa: E402
 from frbus_shock import (  # noqa: E402
     ACTIVE_RULES,
     DEBT_LABELS,
+    DEBT_SOURCES,
     FISCAL_RULES,
     data_vintage,
     run_debt_scenario,
@@ -51,11 +52,12 @@ _BASE = "#888"
 
 @st.cache_data(show_spinner=False, ttl=3600, max_entries=32)
 def _cached_scenario(deficit_pct, deficit_years, fiscal_rules, policy_rule, start,
-                     horizon, feedback):
+                     horizon, feedback, source, permanent):
     res = run_debt_scenario(
         deficit_pct=deficit_pct, deficit_years=deficit_years,
         fiscal_rules=list(fiscal_rules), policy_rule=policy_rule,
-        start=start, horizon=horizon, feedback=feedback,
+        start=start, horizon=horizon, feedback=feedback, source=source,
+        permanent=permanent,
     )
     return {
         "window": [str(q) for q in res.window],
@@ -70,33 +72,48 @@ def _cached_scenario(deficit_pct, deficit_years, fiscal_rules, policy_rule, star
 
 st.title("🏛️ Debt Sustainability")
 st.markdown(
-    "**Set a deficit shock** (how much bigger the federal deficit gets, as a share of "
-    "GDP, and for how long), then see the **federal debt/GDP path** it produces under "
-    "three assumptions about how the government responds. A path that **climbs and "
-    "stays up** is unsustainable; one that **returns toward its starting level** is "
-    "stabilised."
+    "**Set a deficit shock** — a federal spending rise or tax cut, sized as a share of "
+    "GDP — then see the **federal debt/GDP path** it produces under three assumptions "
+    "about how the government responds. A path that **climbs and stays up** is "
+    "unsustainable; one that **returns toward its starting level** is stabilised."
 )
 
-# --- The deficit shock (intuitive: % of GDP for N years) ---
-_c = st.columns(4)
-deficit_pct = _c[0].number_input(
-    "Deficit shock (% of GDP)", value=2.0, step=0.5, min_value=-5.0, max_value=10.0,
-    help="A sustained rise in the federal deficit, as a share of GDP (via higher "
-    "transfers). Positive = bigger deficit (spending up); negative = consolidation.",
+# --- What the shock is (source + size) ---
+_c = st.columns([2, 1, 1, 1])
+source = _c[0].selectbox(
+    "Deficit source", list(DEBT_SOURCES), format_func=lambda k: DEBT_SOURCES[k][3],
+    key="debt_src",
+    help="Which federal lever widens the deficit. All are exogenised so the impulse "
+    "is a clean share of GDP.\n\n(Personal tax cuts and S&L purchases are on the "
+    "**Fiscal Multipliers** tab, not here: the debt-response rules below act *through* "
+    "personal income taxes, and state & local spending doesn't touch the federal "
+    "budget — so neither is a clean *federal-debt* lever.)",
 )
-deficit_years = _c[1].number_input(
-    "…held for (years)", value=5, min_value=1, max_value=20, step=1,
-    help="How long the larger deficit persists before reverting.",
+deficit_pct = _c[1].number_input(
+    "Size (% of GDP)", value=2.0, step=0.5, min_value=-5.0, max_value=10.0,
+    help="Positive = bigger deficit (spending up / taxes down); negative = "
+    "consolidation.",
 )
-policy_rule = _c[2].selectbox(
-    "Monetary response", list(ACTIVE_RULES), format_func=lambda k: ACTIVE_RULES[k][1],
-    key="debt_mrule", help="The monetary-policy rule (it sets interest rates, hence "
-    "debt-service costs). Held common across the fiscal responses.",
+deficit_years = _c[2].number_input(
+    "Held for (years)", value=5, min_value=1, max_value=20, step=1,
+    help="How long the change lasts before reverting (ignored if 'permanent').",
 )
 horizon = _c[3].selectbox(
     "Horizon", [20, 40, 60, 80], index=1, key="debt_h",
     format_func=lambda q: f"{q // 4} years", help="Debt/GDP evolves slowly — a long "
     "horizon shows whether it stabilises or drifts.",
+)
+
+_c2 = st.columns([1, 2, 1])
+permanent = _c2[0].checkbox(
+    "Permanent", value=False, key="debt_perm",
+    help="Hold the change for the whole horizon (a lasting policy change, like a "
+    "permanent tax cut) rather than reverting after the years above.",
+)
+policy_rule = _c2[1].selectbox(
+    "Monetary response", list(ACTIVE_RULES), format_func=lambda k: ACTIVE_RULES[k][1],
+    key="debt_mrule", help="The monetary-policy rule (it sets interest rates, hence "
+    "debt-service costs). Held common across the fiscal responses.",
 )
 
 fiscal_rules = st.multiselect(
@@ -122,7 +139,7 @@ if run:
         try:
             out = _cached_scenario(float(deficit_pct), int(deficit_years),
                                    tuple(fiscal_rules), policy_rule, "2026Q3",
-                                   int(horizon), tuple(feedback))
+                                   int(horizon), tuple(feedback), source, bool(permanent))
         except Exception as exc:  # noqa: BLE001
             st.error(f"Debt analysis failed: {type(exc).__name__}: {exc}")
             st.stop()

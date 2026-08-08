@@ -69,6 +69,9 @@ INSTRUMENTS: Dict[str, FiscalInstrument] = {
     "personal_tax_cut": FiscalInstrument(
         "personal_tax_cut", "Personal tax cut", "trp_aerr", -0.005, 8,
         "tpn", True, -1.0, "A personal income-tax-rate cut — smallest multiplier."),
+    "corporate_tax_cut": FiscalInstrument(
+        "corporate_tax_cut", "Corporate tax cut", "trci_aerr", -0.005, 8,
+        "tcin", True, -1.0, "A corporate income-tax-rate cut — works through investment."),
 }
 
 # Horizons reported (index into the window; 0 = impact quarter).
