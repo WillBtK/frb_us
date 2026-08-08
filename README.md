@@ -24,9 +24,11 @@ baseline) side by side.
   foreign output gap, global long-term rates, foreign inflation), and **Fiscal &
   monetary** (tax rate, policy-rule shock) — plus an advanced raw-variable option.
   **Up to three shocks can be applied together** (e.g. an oil-price spike *and* a
-  fiscal expansion), and a set of **named composite scenarios** ("Global growth
-  scare", "Global inflation surprise", "Dollar funding squeeze") loads a
-  multi-shock configuration you can then edit.
+  fiscal expansion), and a library of **named composite scenarios** — spanning
+  upside and downside regimes (soft landing, fiscal reflation, global growth
+  scare, global inflation surprise, long-end selloff, housing-led downturn,
+  hawkish Fed surprise, trade war, dollar funding squeeze) — loads a multi-shock
+  configuration you can then edit.
 - **Expectations:** VAR-based (backward-looking) or **model-consistent /
   rational** (MCE, `mcap+wp` block).
 - **Monetary policy:** the active inertial Taylor rule vs. the funds rate held at

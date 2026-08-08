@@ -214,6 +214,59 @@ SCENARIO_PRESETS: Dict[str, dict] = {
             {"key": "equity_premium", "magnitude": 200.0, "duration": 4},
         ],
     },
+    "Soft landing / productivity boom": {
+        "blurb": "The benign upside case: a favourable supply shift lifts growth "
+        "while inflation eases, so the Fed can cut — a 'goldilocks' regime.",
+        "shocks": [
+            {"key": "productivity", "magnitude": 0.75, "duration": 4},
+            {"key": "core_prices", "magnitude": -0.3, "duration": 4},
+        ],
+    },
+    "Fiscal reflation": {
+        "blurb": "A demand-led fiscal expansion — higher federal purchases plus a "
+        "personal tax cut — that the active policy rule leans against.",
+        "shocks": [
+            {"key": "fiscal_spending", "magnitude": 1.0, "duration": 8},
+            {"key": "tax", "magnitude": -1.0, "duration": 8},
+        ],
+    },
+    "Long-end selloff (duration shock)": {
+        "blurb": "A Treasury term-premium spike with equity risk-off — long rates "
+        "jump and financial conditions tighten. Note the dollar strengthens in "
+        "FRB/US, as higher US yields draw in capital.",
+        "shocks": [
+            {"key": "term_premium_10y", "magnitude": 75.0, "duration": 2},
+            {"key": "equity_premium", "magnitude": 75.0, "duration": 4},
+        ],
+    },
+    "Housing-led downturn": {
+        "blurb": "A 2008-style housing bust: falling house prices and residential "
+        "investment, dearer mortgages, and a wider credit premium feed a downturn.",
+        "shocks": [
+            {"key": "house_prices", "magnitude": -4.0, "duration": 1},
+            {"key": "housing", "magnitude": -4.0, "duration": 4},
+            {"key": "mortgage_rate", "magnitude": 100.0, "duration": 4},
+            {"key": "term_premium", "magnitude": 75.0, "duration": 4},
+        ],
+    },
+    "Hawkish Fed surprise": {
+        "blurb": "An unexpected policy tightening plus the equity risk-off it "
+        "triggers. (The rate leg acts through the active rule only — it is inert "
+        "in the funds-rate-held panel by construction.)",
+        "shocks": [
+            {"key": "monetary", "magnitude": 75.0, "duration": 1},
+            {"key": "equity_premium", "magnitude": 100.0, "duration": 4},
+        ],
+    },
+    "Trade war / tariff shock": {
+        "blurb": "A tariff-driven trade shock: import prices jump and export demand "
+        "falls — a stagflationary mix of higher inflation and weaker output.",
+        "shocks": [
+            {"key": "import_prices", "magnitude": 8.0, "duration": 4},
+            {"key": "exports", "magnitude": -3.0, "duration": 4},
+            {"key": "core_prices", "magnitude": 0.3, "duration": 4},
+        ],
+    },
 }
 
 
