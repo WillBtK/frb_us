@@ -15,14 +15,18 @@ baseline) side by side.
 
 ## What it does
 
-- **Shocks** — a friendly-named library (19 shocks, each mapped to an FRB/US
+- **Shocks** — a friendly-named library (22 shocks, each mapped to an FRB/US
   add-factor lever and empirically sign-checked), grouped as **Demand** (household
   consumption, durables, housing, business investment, exports, imports, federal
   spending), **Prices & supply** (oil, core prices, import prices, house prices,
   productivity), **Financial** (corporate & 10y term premia, equity premium,
-  mortgage rate, exchange rate), and **Fiscal & monetary** (tax rate, policy-rule
-  shock) — plus an advanced raw-variable option. **Up to three shocks can be
-  applied together** (e.g. an oil-price spike *and* a fiscal expansion).
+  mortgage rate), **External / global** (real exchange rate, global growth /
+  foreign output gap, global long-term rates, foreign inflation), and **Fiscal &
+  monetary** (tax rate, policy-rule shock) — plus an advanced raw-variable option.
+  **Up to three shocks can be applied together** (e.g. an oil-price spike *and* a
+  fiscal expansion), and a set of **named composite scenarios** ("Global growth
+  scare", "Global inflation surprise", "Dollar funding squeeze") loads a
+  multi-shock configuration you can then edit.
 - **Expectations:** VAR-based (backward-looking) or **model-consistent /
   rational** (MCE, `mcap+wp` block).
 - **Monetary policy:** the active inertial Taylor rule vs. the funds rate held at
@@ -30,11 +34,14 @@ baseline) side by side.
 - **Outputs:** a grouped, selectable menu (defaulting to GDP growth, unemployment,
   PCE inflation, and the funds rate). Add **Activity** (output gap; real GDP,
   consumption, investment as % deviations), **Inflation** (core PCE, CPI/core CPI,
-  4-quarter measures), **Interest rates** (real funds rate; 5y/10y/30y
-  Treasury, BBB corporate, 10y term premium), and **Financial & external** (real
-  expected equity return, equity risk premium, real exchange rate, house prices).
-  Rates/inflation are shown in percentage points, levels as percent deviations
-  from baseline.
+  4-quarter measures), **Interest rates** (real funds rate; 5y/10y/30y Treasury,
+  BBB corporate, 10y/30y term premia, plus derived **yield-curve slopes** and the
+  **BBB–Treasury credit spread**), and **Financial & external** (real expected
+  equity return, equity risk premium, real & nominal exchange rate, house prices,
+  foreign GDP, and the external balances — **current account, trade balance, net
+  international investment position, and net investment income, each as a % of
+  GDP**). Rates/inflation and %-of-GDP balances are shown in percentage points,
+  other levels as percent deviations from baseline.
 - **Export:** download any run as CSV (deviation panel) or PNG/HTML chart, since
   each run is computationally non-trivial.
 - **Fiscal Multipliers page** (a second tab): output multipliers (ΔGDP per $ of

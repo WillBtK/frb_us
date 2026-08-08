@@ -142,10 +142,32 @@ CATALOGUE: Dict[str, ShockSpec] = {s.key: s for s in [
     _spec("mortgage_rate", "Mortgage rate", "Financial", "rme_aerr",
           "basis points", _PCT, 100.0, 4, "Dearer mortgages weigh on housing/GDP.",
           "A change in the conventional mortgage rate."),
-    _spec("exchange_rate", "Real exchange rate (broad)", "Financial", "fpxr_aerr",
+    # --- External / global ---
+    _spec("exchange_rate", "Real exchange rate (broad $)", "External / global", "fpxr_aerr",
           "% (up = stronger $)", _PCT, 5.0, 4,
           "A stronger dollar trims net exports and inflation.",
-          "A change in the broad real exchange rate. Positive = appreciation."),
+          "A direct change in the broad real exchange rate. Positive = appreciation."),
+    _spec("global_growth", "Global growth (foreign output gap)", "External / global",
+          "fxgap_aerr", "pp/quarter impulse", 1.0, 1.0, 4,
+          "Stronger world demand lifts US exports and GDP; the dollar softens.",
+          "An impulse to the foreign output gap (world, export-weighted). Positive = a "
+          "global upswing — it raises US exports and GDP, improves the current account "
+          "and weakens the dollar; negative = a global growth scare. The gap is "
+          "persistent, so the impulse compounds: ~1pp of gap for a single-quarter hit, "
+          "~4½pp held four quarters (foreign GDP moves about one-for-one with the gap)."),
+    _spec("global_rates", "Global long-term interest rates", "External / global",
+          "frl10_aerr", "basis points", _PCT, 50.0, 4,
+          "Higher foreign yields weaken the dollar, lifting net exports and import prices.",
+          "A change in the foreign (G10) 10-year interest rate. Higher foreign yields "
+          "shrink the US–foreign rate differential, so the dollar depreciates — "
+          "boosting net exports but raising import prices (imported inflation)."),
+    _spec("foreign_inflation", "Foreign inflation (G10)", "External / global",
+          "fpi10_aerr", "pp (annualised)", 1.0, 1.0, 4,
+          "Transmits to the US mainly via a weaker dollar and dearer imports.",
+          "A change in G10 foreign consumer-price inflation. It raises foreign policy "
+          "rates and weakens the dollar, feeding through to US import prices; the "
+          "direct effect on US GDP and PCE inflation is small (select the exchange-rate "
+          "and import-price outputs to see the main channel)."),
     # --- Fiscal & monetary ---
     _spec("tax", "Personal tax rate", "Fiscal & monetary", "trp_aerr",
           "percentage points of the tax rate", _PCT, 1.0, 8,
@@ -158,6 +180,41 @@ CATALOGUE: Dict[str, ShockSpec] = {s.key: s for s in [
           "when the funds rate is held.",
           "A direct shock to the policy rule. This is the Fed demo/validation case."),
 ]}
+
+
+# Named multi-shock scenarios a cross-asset strategist reasons in — each is a
+# list of {key, magnitude, duration} applied together. Signs/levers all come from
+# the catalogue above (empirically checked); magnitudes are illustrative and fully
+# editable once loaded into the dashboard.
+SCENARIO_PRESETS: Dict[str, dict] = {
+    "Global growth scare": {
+        "blurb": "A worldwide demand downturn with risk-off financial conditions: "
+        "weaker foreign growth drags US exports while credit and equity premia widen.",
+        "shocks": [
+            {"key": "global_growth", "magnitude": -1.0, "duration": 4},
+            {"key": "term_premium", "magnitude": 75.0, "duration": 4},
+            {"key": "equity_premium", "magnitude": 150.0, "duration": 4},
+        ],
+    },
+    "Global inflation surprise": {
+        "blurb": "A broad-based cost-push shock: an oil spike plus higher foreign "
+        "inflation and a domestic core-price impulse — the stagflationary case.",
+        "shocks": [
+            {"key": "oil", "magnitude": 30.0, "duration": 4},
+            {"key": "foreign_inflation", "magnitude": 1.5, "duration": 4},
+            {"key": "core_prices", "magnitude": 0.5, "duration": 4},
+        ],
+    },
+    "Dollar funding squeeze": {
+        "blurb": "A flight-to-safety dollar spike with a sharp tightening of risk "
+        "conditions: the broad dollar jumps as credit and equity premia blow out.",
+        "shocks": [
+            {"key": "exchange_rate", "magnitude": 6.0, "duration": 4},
+            {"key": "term_premium", "magnitude": 100.0, "duration": 4},
+            {"key": "equity_premium", "magnitude": 200.0, "duration": 4},
+        ],
+    },
+}
 
 
 def get_shock(key: str) -> ShockSpec:

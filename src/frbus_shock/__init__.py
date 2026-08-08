@@ -47,7 +47,13 @@ from .multipliers import (
     run_multiplier,
 )
 from .optcontrol import DEFAULT_WEIGHTS, OCPResult, run_optimal_control
-from .shocks import CATALOGUE, ShockSpec, custom_shock, get_shock
+from .shocks import (
+    CATALOGUE,
+    SCENARIO_PRESETS,
+    ShockSpec,
+    custom_shock,
+    get_shock,
+)
 from .simulate import (
     DEFAULT_HORIZON,
     DEFAULT_START,
@@ -62,6 +68,7 @@ __all__ = [
     "DEFAULT_START",
     "DEFAULT_HORIZON",
     "CATALOGUE",
+    "SCENARIO_PRESETS",
     "ShockSpec",
     "ShockRequest",
     "get_shock",

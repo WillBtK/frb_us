@@ -111,6 +111,61 @@ def test_summary_table_peak_and_horizons():
     assert (tbl["unit"] == "%").any()
 
 
+def test_global_growth_lifts_exports_and_softens_dollar():
+    """A positive foreign output-gap shock raises US exports and weakens the $."""
+    result = run_simulation("global_growth", magnitude=1.0, duration=4, horizon=12)
+    dev = deviations(result, "active", ["xgdp", "fpxr", "cab_gdp"])
+    assert dev["xgdp"].iloc[Q4] > 0            # stronger world demand -> higher US GDP
+    assert dev["fpxr"].iloc[Q4] < 0            # dollar depreciates
+    assert dev["cab_gdp"].iloc[Q4] > 0         # current account improves
+
+
+def _pmo_dev(result, q=Q4):
+    """Import-price deviation (pmo isn't a selectable output; read the raw frames)."""
+    return (100.0 * (result.active["pmo"] / result.baseline["pmo"] - 1.0)).iloc[q]
+
+
+def test_global_rates_weaken_dollar_and_raise_import_prices():
+    """Higher foreign long rates shrink the differential -> weaker $, dearer imports."""
+    result = run_simulation("global_rates", magnitude=100.0, duration=4, horizon=12)
+    assert deviations(result, "active", ["fpxr"])["fpxr"].iloc[Q4] < 0  # dollar weakens
+    assert _pmo_dev(result) > 0                                          # import prices rise
+
+
+def test_foreign_inflation_weakens_dollar():
+    """Foreign inflation transmits mainly via a weaker dollar / import prices."""
+    result = run_simulation("foreign_inflation", magnitude=1.0, duration=4, horizon=12)
+    assert deviations(result, "active", ["fpxr"])["fpxr"].iloc[Q4] < 0
+    assert _pmo_dev(result) > 0
+
+
+def test_derived_external_and_spread_outputs():
+    """Derived ratio/spread outputs compute finite values with the right units."""
+    result = run_simulation("fiscal_spending", magnitude=1.0, duration=8, horizon=12)
+    keys = ["cab_gdp", "nx_gdp", "niip_gdp", "netii_gdp", "fpx", "fgdp",
+            "slope_10y_ff", "slope_10y_5y", "spread_bbb_10y", "rg30p"]
+    dev = deviations(result, "active", keys)
+    assert dev.notna().all().all()
+    # Fiscal expansion deteriorates the external balance (twin-deficit).
+    assert dev["cab_gdp"].iloc[Q4] < 0
+    # The active rule tightens, flattening the curve slope by the end of the window.
+    assert dev["slope_10y_ff"].iloc[-1] < 0
+    # % of GDP ratio outputs carry the explicit unit label.
+    from frbus_shock import OUTPUT_BY_KEY
+    assert OUTPUT_BY_KEY["cab_gdp"].unit == "pp of GDP"
+    assert OUTPUT_BY_KEY["slope_10y_ff"].unit == "pp"
+
+
+def test_scenario_presets_run():
+    """Every named composite scenario resolves and solves as a multi-shock run."""
+    from frbus_shock import SCENARIO_PRESETS, run_metadata
+
+    for name, preset in SCENARIO_PRESETS.items():
+        result = run_simulation(shocks=preset["shocks"], horizon=8)
+        assert run_metadata(result)["n_shocks"] == len(preset["shocks"])
+        assert deviations(result, "active").notna().all().all()
+
+
 @pytest.mark.slow
 def test_mce_expectations_solve_and_hold():
     """Model-consistent expectations solve, and the funds-rate hold still pins rff."""

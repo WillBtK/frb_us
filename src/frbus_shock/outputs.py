@@ -17,7 +17,7 @@ are unchanged; the rest are opt-in via the dashboard's output selector.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Sequence
+from typing import Callable, Dict, List, Optional, Sequence
 
 import pandas as pd
 
@@ -26,16 +26,49 @@ from .simulate import SimResult
 
 @dataclass(frozen=True)
 class OutputVar:
-    """One selectable output variable."""
+    """One selectable output variable.
 
-    key: str  # FRB/US variable name
+    Most variables map directly onto a single FRB/US series (``key``). Some are
+    **derived** — a ratio (e.g. current account as a share of GDP) or a spread
+    (e.g. the BBB–Treasury credit spread) computed from several series. For those,
+    ``derive`` is a function of a solved DataFrame returning the level series; the
+    ``transform`` is then applied to that derived level exactly as for a raw one.
+    ``unit_override`` lets a derived ``diff`` variable label its unit precisely
+    (e.g. "pp of GDP").
+    """
+
+    key: str  # stable identifier (a FRB/US variable name, or a derived-series key)
     label: str
     group: str
     transform: str  # "diff" (-> pp) or "pct" (-> %)
+    derive: Optional[Callable[[pd.DataFrame], pd.Series]] = None
+    unit_override: Optional[str] = None
 
     @property
     def unit(self) -> str:
+        if self.unit_override is not None:
+            return self.unit_override
         return "pp" if self.transform == "diff" else "%"
+
+    def level(self, frame: pd.DataFrame) -> pd.Series:
+        """The variable's level series in one solved scenario/baseline frame."""
+        if self.derive is not None:
+            return self.derive(frame)
+        return frame[self.key]
+
+
+# --- Derived-series builders (ratios and spreads computed from a solved frame) ---
+def _share_of_gdp(numerator: str) -> Callable[[pd.DataFrame], pd.Series]:
+    """A current-$ flow/stock as a percent of nominal GDP."""
+    return lambda f: 100.0 * f[numerator] / f["xgdpn"]
+
+
+def _net_exports_share() -> Callable[[pd.DataFrame], pd.Series]:
+    return lambda f: 100.0 * (f["exn"] - f["emn"]) / f["xgdpn"]
+
+
+def _spread(a: str, b: str) -> Callable[[pd.DataFrame], pd.Series]:
+    return lambda f: f[a] - f[b]
 
 
 # Ordered catalogue, grouped. Order here is the display order within each group.
@@ -72,13 +105,33 @@ OUTPUT_CATALOGUE: List[OutputVar] = [
     OutputVar("rg30", "30-year Treasury yield", "Interest rates", "diff"),
     OutputVar("rbbb", "BBB corporate bond yield", "Interest rates", "diff"),
     OutputVar("rg10p", "10-year term premium", "Interest rates", "diff"),
+    OutputVar("rg30p", "30-year term premium", "Interest rates", "diff"),
     OutputVar("rme", "Mortgage rate (30-year)", "Interest rates", "diff"),
     OutputVar("rcar", "New-car loan rate", "Interest rates", "diff"),
+    # Derived spreads — what curve / credit strategists actually watch.
+    OutputVar("slope_10y_ff", "Yield-curve slope (10y − funds)", "Interest rates",
+              "diff", derive=_spread("rg10", "rff")),
+    OutputVar("slope_10y_5y", "Yield-curve slope (10y − 5y)", "Interest rates",
+              "diff", derive=_spread("rg10", "rg5")),
+    OutputVar("spread_bbb_10y", "Credit spread (BBB − 10y Treasury)", "Interest rates",
+              "diff", derive=_spread("rbbb", "rg10")),
     # --- Financial & external ---
     OutputVar("req", "Real equity return (expected)", "Financial & external", "diff"),
     OutputVar("reqp", "Equity risk premium", "Financial & external", "diff"),
     OutputVar("fpxr", "Real exchange rate (broad; up = stronger $)", "Financial & external", "pct"),
+    OutputVar("fpx", "Nominal exchange rate (broad)", "Financial & external", "pct"),
     OutputVar("phouse", "House prices", "Financial & external", "pct"),
+    OutputVar("fgdp", "Foreign real GDP (world)", "Financial & external", "pct"),
+    # External balances (current-$ flows/stocks as a share of nominal GDP).
+    OutputVar("cab_gdp", "Current-account balance (% of GDP)", "Financial & external",
+              "diff", derive=_share_of_gdp("fcbn"), unit_override="pp of GDP"),
+    OutputVar("nx_gdp", "Trade balance (% of GDP)", "Financial & external",
+              "diff", derive=_net_exports_share(), unit_override="pp of GDP"),
+    OutputVar("niip_gdp", "Net international investment position (% of GDP)",
+              "Financial & external", "diff", derive=_share_of_gdp("fnin"),
+              unit_override="pp of GDP"),
+    OutputVar("netii_gdp", "Net investment income (% of GDP)", "Financial & external",
+              "diff", derive=_share_of_gdp("fynin"), unit_override="pp of GDP"),
     # --- Government ---
     OutputVar("gfdbtn", "Federal debt (stock)", "Government", "pct"),
 ]
@@ -135,10 +188,12 @@ def deviations(
     out = pd.DataFrame(index=result.window)
     for key in _resolve_vars(variables):
         var = OUTPUT_BY_KEY[key]
+        sim_level = var.level(sim)
+        base_level = var.level(result.baseline)
         if var.transform == "pct":
-            out[key] = 100.0 * (sim[key] / result.baseline[key] - 1.0)
+            out[key] = 100.0 * (sim_level / base_level - 1.0)
         else:  # diff
-            out[key] = sim[key] - result.baseline[key]
+            out[key] = sim_level - base_level
     return out
 
 
@@ -179,9 +234,10 @@ def levels_panel(
     """Wide panel of baseline and scenario *levels* for each requested variable."""
     frames = {}
     for key in _resolve_vars(variables):
-        frames[f"{key}_baseline"] = result.baseline[key]
-        frames[f"{key}_active"] = result.active[key]
-        frames[f"{key}_held"] = result.held[key]
+        var = OUTPUT_BY_KEY[key]
+        frames[f"{key}_baseline"] = var.level(result.baseline).values
+        frames[f"{key}_active"] = var.level(result.active).values
+        frames[f"{key}_held"] = var.level(result.held).values
     panel = pd.DataFrame(frames)
     panel.index = [str(q) for q in result.window]
     panel.index.name = "quarter"
